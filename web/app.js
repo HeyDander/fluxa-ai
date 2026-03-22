@@ -36,6 +36,11 @@ const bonusToast = document.getElementById("bonus-toast");
 let authMode = "login";
 let typingNode = null;
 let toastTimer = null;
+let liveSyncTimer = null;
+let syncInFlight = false;
+let lastHistorySnapshot = "";
+let lastUserSnapshot = "";
+let awaitingChatReply = false;
 
 function setComposerEnabled(enabled) {
   input.disabled = !enabled;
@@ -251,11 +256,74 @@ function renderHistory(history) {
   }
 }
 
+function snapshotHistory(history) {
+  return JSON.stringify(history || []);
+}
+
+function snapshotUser(user) {
+  if (!user) return "";
+  return JSON.stringify({
+    username: user.username,
+    credits: user.credits,
+    referrals: user.referrals,
+    banned: user.banned,
+    referral_code: user.referral_code,
+    credit_history: user.credit_history,
+    tasks: user.tasks,
+  });
+}
+
+function stopLiveSync() {
+  if (liveSyncTimer) {
+    clearInterval(liveSyncTimer);
+    liveSyncTimer = null;
+  }
+}
+
+async function syncLiveState() {
+  if (syncInFlight || authOverlay.classList.contains("hidden") === false) {
+    return;
+  }
+  syncInFlight = true;
+  try {
+    const data = await request("/api/me");
+    const nextUserSnapshot = snapshotUser(data.user);
+    const nextHistorySnapshot = snapshotHistory(data.history);
+
+    if (nextUserSnapshot !== lastUserSnapshot) {
+      applyUser(data.user);
+      lastUserSnapshot = nextUserSnapshot;
+    }
+
+    if (!awaitingChatReply && nextHistorySnapshot !== lastHistorySnapshot) {
+      renderHistory(data.history);
+      lastHistorySnapshot = nextHistorySnapshot;
+    }
+  } catch {
+    stopLiveSync();
+    lastUserSnapshot = "";
+    lastHistorySnapshot = "";
+    applyUser(null);
+  } finally {
+    syncInFlight = false;
+  }
+}
+
+function startLiveSync() {
+  stopLiveSync();
+  liveSyncTimer = setInterval(syncLiveState, 2000);
+}
+
 async function boot() {
   try {
     const data = await request("/api/me");
     applyUser(data.user);
     renderHistory(data.history);
+    lastUserSnapshot = snapshotUser(data.user);
+    lastHistorySnapshot = snapshotHistory(data.history);
+    if (data.user) {
+      startLiveSync();
+    }
   } catch {
     applyUser(null);
   }
@@ -275,6 +343,9 @@ authForm.addEventListener("submit", async (event) => {
     });
     applyUser(data.user);
     clearMessages();
+    lastUserSnapshot = snapshotUser(data.user);
+    lastHistorySnapshot = "";
+    startLiveSync();
     authPassword.value = "";
     authReferral.value = "";
   } catch (error) {
@@ -289,6 +360,9 @@ tabRegister.addEventListener("click", () => setAuthMode("register"));
 
 logoutButton.addEventListener("click", async () => {
   await request("/api/logout", {});
+  stopLiveSync();
+  lastUserSnapshot = "";
+  lastHistorySnapshot = "";
   applyUser(null);
 });
 
@@ -334,6 +408,7 @@ promoForm.addEventListener("submit", async (event) => {
 deleteChatButton.addEventListener("click", async () => {
   await request("/api/chat/clear", {});
   clearMessages();
+  lastHistorySnapshot = "";
 });
 
 form.addEventListener("submit", async (event) => {
@@ -344,6 +419,7 @@ form.addEventListener("submit", async (event) => {
   appendMessage("user", message);
   input.value = "";
   setComposerEnabled(false);
+  awaitingChatReply = true;
   showTyping(/ищи|найди|что такое|че такое/i.test(message) ? "Ищу..." : "Думаю...");
 
   try {
@@ -352,11 +428,19 @@ form.addEventListener("submit", async (event) => {
     appendMessage("bot", data.reply);
     if (data.user) {
       applyUser(data.user);
+      lastUserSnapshot = snapshotUser(data.user);
     }
+    const currentHistory = Array.from(messages.querySelectorAll(".message")).map((node) => {
+      const role = node.classList.contains("user") ? "user" : "bot";
+      const bubble = node.querySelector(".bubble");
+      return { role, text: bubble ? bubble.textContent : "" };
+    });
+    lastHistorySnapshot = snapshotHistory(currentHistory);
   } catch (error) {
     hideTyping();
     appendMessage("bot", error.message);
   } finally {
+    awaitingChatReply = false;
     hideTyping();
     setComposerEnabled(true);
     input.focus();

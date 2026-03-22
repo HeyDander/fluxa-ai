@@ -24,6 +24,8 @@ let allUsers = [];
 let apiBaseUrl = localStorage.getItem("fluxa_admin_api_url") || "";
 let adminApiKey = localStorage.getItem("fluxa_admin_api_key") || "";
 let activeUsername = "";
+let liveUsersTimer = null;
+let usersRequestInFlight = false;
 
 const FUN_ACTIONS = [
   {
@@ -107,6 +109,20 @@ function setAdminState(connected) {
   refreshUsersButton.classList.toggle("hidden", !connected);
   adminLogoutButton.classList.toggle("hidden", !connected);
   adminStatus.textContent = connected ? `Подключено к: ${apiBaseUrl}` : "Нет подключения";
+}
+
+function stopLiveUsersSync() {
+  if (liveUsersTimer) {
+    clearInterval(liveUsersTimer);
+    liveUsersTimer = null;
+  }
+}
+
+function startLiveUsersSync() {
+  stopLiveUsersSync();
+  liveUsersTimer = setInterval(() => {
+    void loadUsers(true);
+  }, 2000);
 }
 
 function renderUsers(users) {
@@ -240,12 +256,25 @@ function renderFunActions() {
   }
 }
 
-async function loadUsers() {
-  const data = await request("/api/admin/users");
-  allUsers = data.users || [];
-  renderUsers(allUsers);
-  if (activeUsername) {
-    selectUser(activeUsername);
+async function loadUsers(silent = false) {
+  if (usersRequestInFlight) {
+    return;
+  }
+  usersRequestInFlight = true;
+  try {
+    const data = await request("/api/admin/users");
+    allUsers = data.users || [];
+    renderUsers(allUsers);
+    if (activeUsername) {
+      selectUser(activeUsername);
+    }
+  } catch (error) {
+    if (!silent) {
+      loginError.textContent = error.message;
+      throw error;
+    }
+  } finally {
+    usersRequestInFlight = false;
   }
 }
 
@@ -258,6 +287,7 @@ async function boot() {
     await request("/api/admin/me");
     setAdminState(true);
     await loadUsers();
+    startLiveUsersSync();
   } catch (error) {
     setAdminState(false);
     loginError.textContent = error.message;
@@ -282,6 +312,7 @@ loginForm.addEventListener("submit", async (event) => {
     await request("/api/admin/me");
     setAdminState(true);
     await loadUsers();
+    startLiveUsersSync();
   } catch (error) {
     loginError.textContent = error.message;
   }
@@ -289,6 +320,7 @@ loginForm.addEventListener("submit", async (event) => {
 
 refreshUsersButton.addEventListener("click", loadUsers);
 adminLogoutButton.addEventListener("click", () => {
+  stopLiveUsersSync();
   localStorage.removeItem("fluxa_admin_api_url");
   localStorage.removeItem("fluxa_admin_api_key");
   apiBaseUrl = "";
