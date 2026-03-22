@@ -74,6 +74,7 @@ body {
   align-items: center;
   gap: 12px;
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 .admin-brand h1,
@@ -111,11 +112,11 @@ body {
 .grant-input {
   width: 100%;
   min-width: 0;
-  border: 1px solid transparent;
+  border: 1px solid var(--line);
   border-radius: 18px;
   background: white;
   color: var(--text);
-  padding: 14px 16px;
+  padding: 12px 14px;
   font: inherit;
   outline: none;
 }
@@ -130,8 +131,8 @@ body {
 .admin-button {
   border: 0;
   border-radius: 999px;
-  padding: 12px 16px;
-  min-height: 46px;
+  padding: 10px 16px;
+  min-height: 42px;
   cursor: pointer;
   color: white;
   font-weight: 700;
@@ -178,12 +179,13 @@ body {
 .user-actions {
   margin-top: 14px;
   justify-content: flex-start;
+  flex-wrap: wrap;
 }
 
 .grant-input {
-  width: min(220px, 100%);
+  width: 148px;
   color: var(--text);
-  background: #ffffff;
+  background: rgba(123, 77, 255, 0.05);
   font-weight: 800;
   text-align: center;
   caret-color: var(--accent);
@@ -354,11 +356,33 @@ textarea:focus {
 }
 
 @media (min-width: 1024px) {
+  .admin-main {
+    padding: 18px;
+    gap: 14px;
+  }
+
   .admin-sidebar {
     position: sticky;
     top: 0;
     max-height: 100vh;
     overflow: auto;
+  }
+
+  .panel,
+  .admin-card {
+    padding: 18px;
+  }
+
+  .user-card {
+    padding: 16px;
+  }
+
+  .search-input {
+    width: 260px;
+  }
+
+  .panel-actions {
+    justify-content: flex-end;
   }
 }
 
