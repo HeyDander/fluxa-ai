@@ -764,6 +764,7 @@ def ensure_user_record(username: str, users: dict) -> dict:
             "daily_claimed_tasks": [],
             "daily_completed_tasks": [],
             "last_daily_bonus_day": "",
+            "credit_history": [],
             "claimed_tasks": [],
             "completed_tasks": [],
         },
@@ -778,6 +779,7 @@ def ensure_user_record(username: str, users: dict) -> dict:
     user.setdefault("daily_claimed_tasks", [])
     user.setdefault("daily_completed_tasks", [])
     user.setdefault("last_daily_bonus_day", "")
+    user.setdefault("credit_history", [])
     user.setdefault("claimed_tasks", [])
     user.setdefault("completed_tasks", [])
     ensure_daily_tasks(user)
@@ -794,7 +796,22 @@ def apply_daily_login_bonus(user: dict) -> bool:
         return False
     user["credits"] = user.get("credits", DEFAULT_CREDITS) + DAILY_LOGIN_BONUS
     user["last_daily_bonus_day"] = day
+    record_credit_event(user, DAILY_LOGIN_BONUS, "Начисление", "Ежедневный бонус")
     return True
+
+
+def record_credit_event(user: dict, amount: int, title: str, description: str) -> None:
+    history = user.setdefault("credit_history", [])
+    history.insert(
+        0,
+        {
+            "amount": amount,
+            "title": title,
+            "description": description,
+            "created_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
+        },
+    )
+    user["credit_history"] = history[:25]
 
 
 def serialize_user(user: dict, username: str, profile: dict, daily_bonus_awarded: bool = False) -> dict:
@@ -804,6 +821,7 @@ def serialize_user(user: dict, username: str, profile: dict, daily_bonus_awarded
         "referral_code": user.get("referral_code"),
         "referrals": user.get("referrals", 0),
         "tasks": task_state(user, profile),
+        "credit_history": user.get("credit_history", []),
         "daily_bonus_awarded": daily_bonus_awarded,
         "daily_bonus_amount": DAILY_LOGIN_BONUS if daily_bonus_awarded else 0,
     }
@@ -1658,6 +1676,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     "daily_claimed_tasks": [],
                     "daily_completed_tasks": [],
                     "last_daily_bonus_day": "",
+                    "credit_history": [],
                     "claimed_tasks": [],
                     "completed_tasks": [],
                 }
@@ -1672,6 +1691,8 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                             new_user["credits"] += REFERRAL_BONUS
                             existing_user["credits"] = existing_user.get("credits", DEFAULT_CREDITS) + REFERRAL_BONUS
                             existing_user["referrals"] = existing_user.get("referrals", 0) + 1
+                            record_credit_event(new_user, REFERRAL_BONUS, "Начисление", "Бонус за регистрацию по рефералу")
+                            record_credit_event(existing_user, REFERRAL_BONUS, "Начисление", f"Реферал: пользователь {username}")
                             break
                 save_users(users)
                 token = secrets.token_hex(24)
@@ -1734,6 +1755,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     return self._send_json({"error": "Награда уже получена."}, status=400)
                 user.setdefault("daily_claimed_tasks", []).append(task_id)
                 user["credits"] = user.get("credits", DEFAULT_CREDITS) + task["reward"]
+                record_credit_event(user, task["reward"], "Начисление", f"Награда за задание: {task['title']}")
                 save_users(users)
                 return self._send_json({"ok": True, "user": self._current_user()})
 
@@ -1769,6 +1791,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
 
             answer = bot.reply(message)
             user["credits"] -= MESSAGE_COST
+            record_credit_event(user, -MESSAGE_COST, "Списание", "Сообщение в чате")
             ensure_daily_tasks(user)
             for key, amount in classify_message_stats(message, answer).items():
                 user["stats"][key] = user["stats"].get(key, 0) + amount

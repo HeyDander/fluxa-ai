@@ -145,6 +145,42 @@ body {
   padding: 14px;
 }
 
+.history-list {
+  display: grid;
+  gap: 10px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.history-item {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.history-item:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.history-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.history-amount {
+  font-weight: 800;
+}
+
+.history-amount.plus {
+  color: #5c3fe6;
+}
+
+.history-amount.minus {
+  color: #c53f7a;
+}
+
 .task-title {
   font-weight: 700;
 }

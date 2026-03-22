@@ -21,6 +21,7 @@ const authReferral = document.getElementById("auth-referral");
 const creditsBalance = document.getElementById("credits-balance");
 const referralCode = document.getElementById("referral-code");
 const referralCount = document.getElementById("referral-count");
+const creditHistory = document.getElementById("credit-history");
 const tasksList = document.getElementById("tasks-list");
 const tasksOverlay = document.getElementById("tasks-overlay");
 const closeTasksButton = document.getElementById("close-tasks");
@@ -142,6 +143,7 @@ function applyUser(user) {
   creditsBalance.textContent = loggedIn ? `${user.credits} кредитов` : "0 кредитов";
   referralCode.textContent = loggedIn ? `Код: ${user.referral_code}` : "Код: -";
   referralCount.textContent = loggedIn ? `Приглашено: ${user.referrals}` : "Приглашено: 0";
+  renderCreditHistory(loggedIn ? user.credit_history : []);
   renderTasks(loggedIn ? user.tasks : []);
   setComposerEnabled(loggedIn);
   if (loggedIn && user.daily_bonus_awarded) {
@@ -149,6 +151,45 @@ function applyUser(user) {
   }
   if (loggedIn) {
     input.focus();
+  }
+}
+
+function renderCreditHistory(items) {
+  creditHistory.innerHTML = "";
+  if (!items || items.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "hint-small";
+    empty.textContent = "Пока пусто.";
+    creditHistory.appendChild(empty);
+    return;
+  }
+
+  for (const item of items) {
+    const row = document.createElement("div");
+    row.className = "history-item";
+
+    const top = document.createElement("div");
+    top.className = "history-top";
+
+    const title = document.createElement("div");
+    title.className = "task-title";
+    title.textContent = item.title;
+
+    const amount = document.createElement("div");
+    amount.className = `history-amount ${item.amount >= 0 ? "plus" : "minus"}`;
+    amount.textContent = `${item.amount >= 0 ? "+" : ""}${item.amount}`;
+
+    const desc = document.createElement("div");
+    desc.className = "hint-small";
+    desc.textContent = item.description;
+
+    const time = document.createElement("div");
+    time.className = "hint-small";
+    time.textContent = item.created_at;
+
+    top.append(title, amount);
+    row.append(top, desc, time);
+    creditHistory.appendChild(row);
   }
 }
 
