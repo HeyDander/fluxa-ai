@@ -2297,7 +2297,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     return self._send_json({"error": "Нужен текст."}, status=400)
                 chats = self._load_chats()
                 chats.setdefault(GLOBAL_CHAT_KEY, []).append(
-                    {"role": "bot", "text": text, "author": "fluxa-ai support"}
+                    {"role": "bot", "text": text, "author": " "}
                 )
                 chats[GLOBAL_CHAT_KEY] = chats[GLOBAL_CHAT_KEY][-200:]
                 self._save_chats(chats)
