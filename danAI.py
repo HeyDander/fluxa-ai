@@ -20,6 +20,11 @@ from typing import Iterable
 import ast
 import operator
 
+try:
+    import psycopg
+except ImportError:
+    psycopg = None
+
 
 DATA_FILE = Path("data_seed.txt") if Path("data_seed.txt").exists() else Path("data.txt")
 ENV_FILE = Path(".env")
@@ -638,59 +643,99 @@ def merge_dialogues(base: list[DialoguePair], memory: list[DialoguePair]) -> lis
 
 
 def load_user_profile(path: Path = PROFILE_FILE) -> dict:
-    if not path.exists():
-        return {}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+    return load_state("user_profile", path)
 
 
 def save_user_profile(profile: dict, path: Path = PROFILE_FILE) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(profile, ensure_ascii=False, indent=2), encoding="utf-8")
+    save_state("user_profile", profile, path)
+
+
+def database_enabled() -> bool:
+    return bool(os.getenv("DATABASE_URL", "")) and psycopg is not None
+
+
+def init_database() -> None:
+    if not database_enabled():
+        return
+    with psycopg.connect(os.getenv("DATABASE_URL", "")) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS app_state (
+                    key TEXT PRIMARY KEY,
+                    value JSONB NOT NULL DEFAULT '{}'::jsonb
+                )
+                """
+            )
+        conn.commit()
+
+
+def load_state(key: str, fallback_path: Path) -> dict:
+    if database_enabled():
+        with psycopg.connect(os.getenv("DATABASE_URL", "")) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT value::text FROM app_state WHERE key = %s", (key,))
+                row = cur.fetchone()
+                if row:
+                    return json.loads(row[0]) if row[0] else {}
+        if fallback_path.exists():
+            try:
+                value = json.loads(fallback_path.read_text(encoding="utf-8"))
+                save_state(key, value, fallback_path)
+                return value
+            except Exception:
+                return {}
+        return {}
+
+    if not fallback_path.exists():
+        return {}
+    try:
+        return json.loads(fallback_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def save_state(key: str, value: dict, fallback_path: Path) -> None:
+    if database_enabled():
+        with psycopg.connect(os.getenv("DATABASE_URL", "")) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO app_state (key, value)
+                    VALUES (%s, %s::jsonb)
+                    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+                    """,
+                    (key, json.dumps(value, ensure_ascii=False)),
+                )
+            conn.commit()
+        return
+
+    fallback_path.parent.mkdir(parents=True, exist_ok=True)
+    fallback_path.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def load_users(path: Path = USERS_FILE) -> dict:
-    if not path.exists():
-        return {}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+    return load_state("users", path)
 
 
 def save_users(users: dict, path: Path = USERS_FILE) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(users, ensure_ascii=False, indent=2), encoding="utf-8")
+    save_state("users", users, path)
 
 
 def load_chats(path: Path = CHATS_FILE) -> dict:
-    if not path.exists():
-        return {}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+    return load_state("chats", path)
 
 
 def save_chats(chats: dict, path: Path = CHATS_FILE) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(chats, ensure_ascii=False, indent=2), encoding="utf-8")
+    save_state("chats", chats, path)
 
 
 def load_sessions(path: Path = SESSIONS_FILE) -> dict:
-    if not path.exists():
-        return {}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+    return load_state("sessions", path)
 
 
 def save_sessions(sessions: dict, path: Path = SESSIONS_FILE) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(sessions, ensure_ascii=False, indent=2), encoding="utf-8")
+    save_state("sessions", sessions, path)
 
 
 def ensure_user_record(username: str, users: dict) -> dict:
@@ -1681,6 +1726,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     load_dotenv()
+    init_database()
     args = parse_args()
     index = train(target_samples=args.samples, force=args.train)
     bot = SmartChatBot(index)
