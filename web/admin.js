@@ -26,6 +26,7 @@ let adminApiKey = localStorage.getItem("fluxa_admin_api_key") || "";
 let activeUsername = "";
 let liveUsersTimer = null;
 let usersRequestInFlight = false;
+let grantAmountDraft = localStorage.getItem("fluxa_admin_grant_amount") || "400";
 
 const FUN_ACTIONS = [
   {
@@ -160,8 +161,12 @@ function renderUsers(users) {
 
     const grantInput = document.createElement("input");
     grantInput.type = "number";
-    grantInput.value = "400";
+    grantInput.value = grantAmountDraft;
     grantInput.className = "grant-input";
+    grantInput.addEventListener("input", () => {
+      grantAmountDraft = grantInput.value || "0";
+      localStorage.setItem("fluxa_admin_grant_amount", grantAmountDraft);
+    });
 
     const grantButton = document.createElement("button");
     grantButton.className = "admin-button";
@@ -171,6 +176,8 @@ function renderUsers(users) {
         username: user.username,
         amount: Number(grantInput.value || 0),
       });
+      grantAmountDraft = grantInput.value || grantAmountDraft;
+      localStorage.setItem("fluxa_admin_grant_amount", grantAmountDraft);
       await loadUsers();
     });
 
