@@ -37,7 +37,7 @@ SERPAPI_KEY=your_key_here
 Railway will run:
 
 ```bash
-python3 danAI.py --web --host 0.0.0.0 --port $PORT
+python3 danAI.py --web --host 0.0.0.0 --port 8000
 ```
 
 ## SerpAPI
