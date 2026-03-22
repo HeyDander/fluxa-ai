@@ -49,7 +49,30 @@
             <input id="user-search" class="search-input" type="text" placeholder="Поиск по логину" />
           </div>
 
-          <section id="users-list" class="users-grid"></section>
+          <div class="panel">
+            <div id="users-summary" class="muted">Пользователей: 0</div>
+          </div>
+
+          <section class="admin-grid">
+            <section id="users-list" class="users-grid"></section>
+
+            <section id="selected-user-panel" class="panel hidden">
+              <p class="kicker">Operator</p>
+              <h2 id="selected-username">Пользователь</h2>
+              <div id="selected-user-meta" class="muted"></div>
+
+              <div id="selected-chat" class="selected-chat"></div>
+
+              <form id="operator-form" class="admin-form">
+                <label>
+                  <span>Ответ оператором</span>
+                  <textarea id="operator-message" rows="5" placeholder="Сообщение пользователю"></textarea>
+                </label>
+                <button class="admin-button" type="submit">Отправить</button>
+              </form>
+              <p id="operator-error" class="error-text"></p>
+            </section>
+          </section>
         </section>
       </main>
     </div>

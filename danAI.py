@@ -2001,6 +2001,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                             "searches_used": user.get("stats", {}).get("searches_used", 0),
                             "chat_messages": len(chats.get(username, [])),
                             "credit_history": user.get("credit_history", [])[:8],
+                            "recent_chat": chats.get(username, [])[-12:],
                         }
                     )
                 return self._send_json({"users": payload})
@@ -2164,6 +2165,25 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 user["banned"] = not user.get("banned", False)
                 self._save_users(users)
                 return self._send_json({"ok": True, "banned": user["banned"]})
+
+            if self.path == "/api/admin/send-message":
+                if not self._require_admin():
+                    return
+                payload = self._read_json()
+                if payload is None:
+                    return self._send_json({"error": "Invalid JSON"}, status=400)
+                username = str(payload.get("username", "")).strip()
+                text = str(payload.get("text", "")).strip()
+                if not username or not text:
+                    return self._send_json({"error": "Нужны логин и текст."}, status=400)
+                users = self._load_users()
+                if username not in users:
+                    return self._send_json({"error": "Пользователь не найден."}, status=404)
+                chats = self._load_chats()
+                chats.setdefault(username, []).append({"role": "bot", "text": f"[Оператор] {text}"})
+                chats[username] = chats[username][-100:]
+                self._save_chats(chats)
+                return self._send_json({"ok": True})
 
             if self.path == "/api/tasks/claim":
                 current = self._current_user()

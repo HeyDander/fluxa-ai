@@ -9,10 +9,19 @@ const adminStatus = document.getElementById("admin-status");
 const refreshUsersButton = document.getElementById("refresh-users");
 const adminLogoutButton = document.getElementById("admin-logout");
 const userSearch = document.getElementById("user-search");
+const usersSummary = document.getElementById("users-summary");
+const selectedUserPanel = document.getElementById("selected-user-panel");
+const selectedUsername = document.getElementById("selected-username");
+const selectedUserMeta = document.getElementById("selected-user-meta");
+const selectedChat = document.getElementById("selected-chat");
+const operatorForm = document.getElementById("operator-form");
+const operatorMessage = document.getElementById("operator-message");
+const operatorError = document.getElementById("operator-error");
 
 let allUsers = [];
 let apiBaseUrl = localStorage.getItem("fluxa_admin_api_url") || "";
 let adminApiKey = localStorage.getItem("fluxa_admin_api_key") || "";
+let activeUsername = "";
 
 apiUrlInput.value = apiBaseUrl;
 apiKeyInput.value = adminApiKey;
@@ -57,11 +66,13 @@ function setAdminState(connected) {
 function renderUsers(users) {
   const query = userSearch.value.trim().toLowerCase();
   const filtered = users.filter((user) => user.username.toLowerCase().includes(query));
+  usersSummary.textContent = `Пользователей: ${users.length}`;
   usersList.innerHTML = "";
 
   for (const user of filtered) {
     const card = document.createElement("article");
     card.className = "user-card";
+    card.addEventListener("click", () => selectUser(user.username));
 
     const titleRow = document.createElement("div");
     titleRow.className = "user-row";
@@ -120,10 +131,36 @@ function renderUsers(users) {
   }
 }
 
+function selectUser(username) {
+  const user = allUsers.find((item) => item.username === username);
+  if (!user) return;
+  activeUsername = username;
+  selectedUserPanel.classList.remove("hidden");
+  selectedUsername.textContent = user.username;
+  selectedUserMeta.textContent = `${user.banned ? "Заблокирован" : "Активен"} · ${user.credits} кр. · Сообщений: ${user.messages_sent}`;
+  selectedChat.innerHTML = "";
+
+  const recent = user.recent_chat || [];
+  if (!recent.length) {
+    selectedChat.innerHTML = `<div class="muted">Чат пока пустой</div>`;
+    return;
+  }
+
+  for (const item of recent) {
+    const line = document.createElement("div");
+    line.className = `chat-line ${item.role}`;
+    line.textContent = `${item.role === "user" ? "User" : "Bot"}: ${item.text}`;
+    selectedChat.appendChild(line);
+  }
+}
+
 async function loadUsers() {
   const data = await request("/api/admin/users");
   allUsers = data.users || [];
   renderUsers(allUsers);
+  if (activeUsername) {
+    selectUser(activeUsername);
+  }
 }
 
 async function boot() {
@@ -174,8 +211,35 @@ adminLogoutButton.addEventListener("click", () => {
   apiUrlInput.value = "";
   apiKeyInput.value = "";
   usersList.innerHTML = "";
+  selectedUserPanel.classList.add("hidden");
+  selectedChat.innerHTML = "";
+  activeUsername = "";
   setAdminState(false);
 });
 userSearch.addEventListener("input", () => renderUsers(allUsers));
+
+operatorForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  operatorError.textContent = "";
+  if (!activeUsername) {
+    operatorError.textContent = "Сначала выбери пользователя.";
+    return;
+  }
+  const text = operatorMessage.value.trim();
+  if (!text) {
+    operatorError.textContent = "Напиши сообщение.";
+    return;
+  }
+  try {
+    await request("/api/admin/send-message", {
+      username: activeUsername,
+      text,
+    });
+    operatorMessage.value = "";
+    await loadUsers();
+  } catch (error) {
+    operatorError.textContent = error.message;
+  }
+});
 
 boot();
