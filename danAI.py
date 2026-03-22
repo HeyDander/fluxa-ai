@@ -811,14 +811,41 @@ def save_user_profile(profile: dict, path: Path = PROFILE_FILE) -> None:
     save_state("user_profile", profile, path)
 
 
+def get_database_url() -> str:
+    direct_keys = (
+        "DATABASE_URL",
+        "POSTGRES_URL",
+        "POSTGRES_PUBLIC_URL",
+        "RAILWAY_DATABASE_URL",
+    )
+    for key in direct_keys:
+        value = os.getenv(key, "").strip()
+        if value:
+            return value
+
+    host = os.getenv("PGHOST", "").strip()
+    port = os.getenv("PGPORT", "").strip()
+    user = os.getenv("PGUSER", "").strip()
+    password = os.getenv("PGPASSWORD", "").strip()
+    database = os.getenv("PGDATABASE", "").strip()
+    if host and port and user and password and database:
+        password = urllib.parse.quote(password, safe="")
+        return f"postgresql://{user}:{password}@{host}:{port}/{database}"
+    return ""
+
+
 def database_enabled() -> bool:
-    return bool(os.getenv("DATABASE_URL", "")) and psycopg is not None
+    return bool(get_database_url()) and psycopg is not None
+
+
+def storage_mode() -> str:
+    return "postgres" if database_enabled() else "local"
 
 
 def init_database() -> None:
     if not database_enabled():
         return
-    with psycopg.connect(os.getenv("DATABASE_URL", "")) as conn:
+    with psycopg.connect(get_database_url()) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -833,7 +860,7 @@ def init_database() -> None:
 
 def load_state(key: str, fallback_path: Path) -> dict:
     if database_enabled():
-        with psycopg.connect(os.getenv("DATABASE_URL", "")) as conn:
+        with psycopg.connect(get_database_url()) as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT value::text FROM app_state WHERE key = %s", (key,))
                 row = cur.fetchone()
@@ -858,7 +885,7 @@ def load_state(key: str, fallback_path: Path) -> dict:
 
 def save_state(key: str, value: dict, fallback_path: Path) -> None:
     if database_enabled():
-        with psycopg.connect(os.getenv("DATABASE_URL", "")) as conn:
+        with psycopg.connect(get_database_url()) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -1830,12 +1857,12 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
             if self.path == "/styles.css":
                 return self._send_file(web_dir / "styles.css", "text/css; charset=utf-8")
             if self.path == "/api/health":
-                return self._send_json({"ok": True})
+                return self._send_json({"ok": True, "storage": storage_mode()})
             if self.path == "/api/me":
                 user = self._current_user()
                 chats = self._load_chats()
                 history = chats.get(user["username"], []) if user else []
-                return self._send_json({"user": user, "history": history})
+                return self._send_json({"user": user, "history": history, "storage": storage_mode()})
             self.send_error(HTTPStatus.NOT_FOUND)
 
         def do_POST(self) -> None:
