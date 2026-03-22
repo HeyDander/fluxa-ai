@@ -19,6 +19,7 @@
 
         <div class="sidebar-actions">
           <button id="new-chat" class="action-button ghost">Новый чат</button>
+          <button id="tasks-button" class="action-button ghost">Задания</button>
           <button id="delete-chat" class="action-button ghost danger">Удалить чат</button>
         </div>
 
@@ -43,11 +44,6 @@
             <div id="referral-code" class="ref-code">Код: -</div>
             <div id="referral-count" class="hint-small">Приглашено: 0</div>
           </div>
-        </div>
-
-        <div class="sidebar-block">
-          <p class="sidebar-label">Задания</p>
-          <div id="tasks-list" class="tasks-list"></div>
         </div>
 
         <div class="sidebar-block account-block">
@@ -109,6 +105,19 @@
         </form>
 
         <p id="auth-error" class="auth-error"></p>
+      </section>
+    </div>
+
+    <div id="tasks-overlay" class="sheet-overlay hidden">
+      <section class="sheet-card">
+        <div class="sheet-head">
+          <div>
+            <p class="brand-kicker">fluxa-ai Tasks</p>
+            <h3>Задания</h3>
+          </div>
+          <button id="close-tasks" class="action-button ghost small" type="button">Закрыть</button>
+        </div>
+        <div id="tasks-list" class="tasks-list"></div>
       </section>
     </div>
 

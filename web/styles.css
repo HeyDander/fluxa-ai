@@ -201,6 +201,10 @@ body {
   padding: 16px 18px;
 }
 
+.action-button.small {
+  padding: 10px 14px;
+}
+
 .hidden {
   display: none;
 }
@@ -342,6 +346,34 @@ body {
 
 .auth-overlay.hidden {
   display: none;
+}
+
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(42, 24, 96, 0.16);
+  backdrop-filter: blur(10px);
+}
+
+.sheet-card {
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(80vh, 760px);
+  overflow: auto;
+  padding: 24px;
+  border-radius: 30px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: var(--shadow);
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
 }
 
 .auth-card {

@@ -897,6 +897,23 @@ class SmartChatBot:
 
         return None
 
+    def _personal_reply(self, message: str) -> str | None:
+        normalized = normalize(message)
+
+        if normalized.startswith(("меня зовут ", "мое имя ")):
+            name = self.user_profile.get("name")
+            if name:
+                return self._add_emoji(f"Приятно познакомиться, {name}. Запомнил тебя.", message)
+            return self._add_emoji("Приятно познакомиться. Запомнил твоё имя.", message)
+
+        if normalized.startswith(("я люблю ", "мне нравится ")):
+            return self._add_emoji("Круто. Запомнил это и постараюсь учитывать в разговоре.", message)
+
+        if normalized.startswith(("я занимаюсь ", "я работаю ")):
+            return self._add_emoji("Понял. Это полезный контекст, я буду иметь его в виду.", message)
+
+        return None
+
     def _search_command(self, message: str) -> str | None:
         stripped = message.strip()
         lowered = normalize(stripped)
@@ -920,6 +937,8 @@ class SmartChatBot:
 
     def _auto_search_answer(self, message: str) -> str | None:
         if self._is_bot_directed(message):
+            return None
+        if self._personal_reply(message):
             return None
         if not os.getenv("SERPAPI_KEY", "") or os.getenv("SERPAPI_KEY", "") == "put_your_serpapi_key_here":
             return None
@@ -1011,6 +1030,8 @@ class SmartChatBot:
         question_type = classify_question(message)
         if self._is_bot_directed(message):
             return "здесь лучше ответить прямо, человечески и без шаблонного ухода в сторону"
+        if self._personal_reply(message):
+            return "здесь лучше ответить тепло, коротко и по-человечески"
         if matches:
             query_keywords = set(extract_keywords(message))
             required_overlap = max(1, min(2, len(query_keywords)))
@@ -1207,16 +1228,8 @@ class SmartChatBot:
         return self._add_emoji("Не понял. Напиши конкретнее.", message)
 
     def _should_use_direct_match(self, message: str, match: tuple[float, dict]) -> bool:
-        score, document = match
-        query_keywords = set(extract_keywords(message))
-        doc_keywords = set(document["keywords"])
-        overlap = len(query_keywords & doc_keywords)
-
-        if normalize(message) == normalize(document["user"]):
-            return True
-        if score > 0.88 and overlap >= max(2, min(3, len(query_keywords))):
-            return True
-        return False
+        _, document = match
+        return normalize(message) == normalize(document["user"])
 
     def _add_emoji(self, answer: str, message: str) -> str:
         if contains_emoji(answer):
@@ -1297,6 +1310,12 @@ class SmartChatBot:
             self.history.append((cleaned, direct))
             self.history = self.history[-8:]
             return direct
+
+        personal = self._personal_reply(cleaned)
+        if personal:
+            self.history.append((cleaned, personal))
+            self.history = self.history[-8:]
+            return personal
 
         meta = self._bot_meta_answer(cleaned)
         if meta:

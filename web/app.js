@@ -3,6 +3,7 @@ const form = document.getElementById("chat-form");
 const input = document.getElementById("chat-input");
 const sendButton = document.getElementById("send-button");
 const newChatButton = document.getElementById("new-chat");
+const tasksButton = document.getElementById("tasks-button");
 const deleteChatButton = document.getElementById("delete-chat");
 const logoutButton = document.getElementById("logout-button");
 const accountName = document.getElementById("account-name");
@@ -21,6 +22,8 @@ const creditsBalance = document.getElementById("credits-balance");
 const referralCode = document.getElementById("referral-code");
 const referralCount = document.getElementById("referral-count");
 const tasksList = document.getElementById("tasks-list");
+const tasksOverlay = document.getElementById("tasks-overlay");
+const closeTasksButton = document.getElementById("close-tasks");
 
 let authMode = "login";
 let typingNode = null;
@@ -213,6 +216,14 @@ logoutButton.addEventListener("click", async () => {
 
 newChatButton.addEventListener("click", () => {
   clearMessages();
+});
+
+tasksButton.addEventListener("click", () => {
+  tasksOverlay.classList.remove("hidden");
+});
+
+closeTasksButton.addEventListener("click", () => {
+  tasksOverlay.classList.add("hidden");
 });
 
 deleteChatButton.addEventListener("click", async () => {
