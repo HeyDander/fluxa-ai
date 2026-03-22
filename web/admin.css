@@ -202,6 +202,8 @@ body {
   background: white;
   border: 1px solid var(--line);
   line-height: 1.5;
+  display: grid;
+  gap: 10px;
 }
 
 .chat-line.user {
@@ -210,6 +212,28 @@ body {
 
 .chat-line.bot {
   border-color: rgba(123, 77, 255, 0.18);
+}
+
+.chat-line-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chat-action-button {
+  border: 1px solid rgba(123, 77, 255, 0.16);
+  border-radius: 999px;
+  padding: 8px 12px;
+  cursor: pointer;
+  background: rgba(123, 77, 255, 0.08);
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.chat-action-button.ghost {
+  background: white;
 }
 
 .fun-panel {

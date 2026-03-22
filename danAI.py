@@ -1991,6 +1991,11 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 payload = []
                 for username, user in sorted(users.items()):
                     ensure_user_record(username, users)
+                    user_chat = chats.get(username, [])
+                    recent_chat = [
+                        {"chat_index": index, "role": item.get("role", "bot"), "text": item.get("text", "")}
+                        for index, item in enumerate(user_chat)
+                    ][-12:]
                     payload.append(
                         {
                             "username": username,
@@ -1999,9 +2004,9 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                             "banned": user.get("banned", False),
                             "messages_sent": user.get("stats", {}).get("messages_sent", 0),
                             "searches_used": user.get("stats", {}).get("searches_used", 0),
-                            "chat_messages": len(chats.get(username, [])),
+                            "chat_messages": len(user_chat),
                             "credit_history": user.get("credit_history", [])[:8],
-                            "recent_chat": chats.get(username, [])[-12:],
+                            "recent_chat": recent_chat,
                         }
                     )
                 return self._send_json({"users": payload})
@@ -2182,6 +2187,51 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 chats = self._load_chats()
                 chats.setdefault(username, []).append({"role": "bot", "text": f"  {text}"})
                 chats[username] = chats[username][-100:]
+                self._save_chats(chats)
+                return self._send_json({"ok": True})
+
+            if self.path == "/api/admin/edit-message":
+                if not self._require_admin():
+                    return
+                payload = self._read_json()
+                if payload is None:
+                    return self._send_json({"error": "Invalid JSON"}, status=400)
+                username = str(payload.get("username", "")).strip()
+                text = str(payload.get("text", "")).strip()
+                chat_index = payload.get("chat_index")
+                if not username or not text or not isinstance(chat_index, int):
+                    return self._send_json({"error": "Нужны логин, индекс и новый текст."}, status=400)
+                users = self._load_users()
+                if username not in users:
+                    return self._send_json({"error": "Пользователь не найден."}, status=404)
+                chats = self._load_chats()
+                user_chat = chats.get(username, [])
+                if chat_index < 0 or chat_index >= len(user_chat):
+                    return self._send_json({"error": "Сообщение не найдено."}, status=404)
+                user_chat[chat_index]["text"] = text
+                chats[username] = user_chat
+                self._save_chats(chats)
+                return self._send_json({"ok": True})
+
+            if self.path == "/api/admin/delete-message":
+                if not self._require_admin():
+                    return
+                payload = self._read_json()
+                if payload is None:
+                    return self._send_json({"error": "Invalid JSON"}, status=400)
+                username = str(payload.get("username", "")).strip()
+                chat_index = payload.get("chat_index")
+                if not username or not isinstance(chat_index, int):
+                    return self._send_json({"error": "Нужны логин и индекс сообщения."}, status=400)
+                users = self._load_users()
+                if username not in users:
+                    return self._send_json({"error": "Пользователь не найден."}, status=404)
+                chats = self._load_chats()
+                user_chat = chats.get(username, [])
+                if chat_index < 0 or chat_index >= len(user_chat):
+                    return self._send_json({"error": "Сообщение не найдено."}, status=404)
+                user_chat.pop(chat_index)
+                chats[username] = user_chat
                 self._save_chats(chats)
                 return self._send_json({"ok": True})
 
