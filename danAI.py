@@ -2180,7 +2180,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 if username not in users:
                     return self._send_json({"error": "Пользователь не найден."}, status=404)
                 chats = self._load_chats()
-                chats.setdefault(username, []).append({"role": "bot", "text": f"(fluxa-ai support) {text}"})
+                chats.setdefault(username, []).append({"role": "bot", "text": f"  {text}"})
                 chats[username] = chats[username][-100:]
                 self._save_chats(chats)
                 return self._send_json({"ok": True})
