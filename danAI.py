@@ -346,6 +346,7 @@ NUMBER_WORDS = {
 DEFAULT_CREDITS = 120
 MESSAGE_COST = 1
 REFERRAL_BONUS = 20
+DAILY_LOGIN_BONUS = 10
 DAILY_TASK_COUNT = 20
 MIN_TASK_REWARD = 15
 
@@ -762,6 +763,7 @@ def ensure_user_record(username: str, users: dict) -> dict:
             "task_day": "",
             "daily_claimed_tasks": [],
             "daily_completed_tasks": [],
+            "last_daily_bonus_day": "",
             "claimed_tasks": [],
             "completed_tasks": [],
         },
@@ -775,6 +777,7 @@ def ensure_user_record(username: str, users: dict) -> dict:
     user.setdefault("task_day", "")
     user.setdefault("daily_claimed_tasks", [])
     user.setdefault("daily_completed_tasks", [])
+    user.setdefault("last_daily_bonus_day", "")
     user.setdefault("claimed_tasks", [])
     user.setdefault("completed_tasks", [])
     ensure_daily_tasks(user)
@@ -783,6 +786,15 @@ def ensure_user_record(username: str, users: dict) -> dict:
 
 def current_task_day() -> str:
     return dt.date.today().isoformat()
+
+
+def apply_daily_login_bonus(user: dict) -> bool:
+    day = current_task_day()
+    if user.get("last_daily_bonus_day") == day:
+        return False
+    user["credits"] = user.get("credits", DEFAULT_CREDITS) + DAILY_LOGIN_BONUS
+    user["last_daily_bonus_day"] = day
+    return True
 
 
 def generate_daily_tasks(day: str) -> list[dict]:
@@ -1587,6 +1599,8 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
             if not user:
                 return None
             ensure_user_record(username, users)
+            if apply_daily_login_bonus(user):
+                save_users(users)
             profile = load_user_profile()
             return {
                 "username": username,
@@ -1636,10 +1650,12 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     "task_day": "",
                     "daily_claimed_tasks": [],
                     "daily_completed_tasks": [],
+                    "last_daily_bonus_day": "",
                     "claimed_tasks": [],
                     "completed_tasks": [],
                 }
                 new_user = users[username]
+                apply_daily_login_bonus(new_user)
                 if referral_code:
                     for existing_username, existing_user in users.items():
                         if existing_username == username:
@@ -1676,6 +1692,8 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 if not user or not verify_password(password, user["salt"], user["password_hash"]):
                     return self._send_json({"error": "Неверный логин или пароль."}, status=401)
                 ensure_user_record(username, users)
+                apply_daily_login_bonus(user)
+                save_users(users)
                 token = secrets.token_hex(24)
                 sessions[token] = username
                 save_sessions(sessions)
