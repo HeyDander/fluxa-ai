@@ -43,6 +43,7 @@ GLOBAL_CHAT_KEY = "__global__"
 WORDS_DB_FILE = Path("data/ru_RU.dic")
 SLANG_ALIASES_FILE = Path("data/ru_slang_aliases.json")
 SLANG_PHRASES_FILE = Path("data/ru_slang_phrases.json")
+EXTRA_ALIASES_FILE = Path("data/ru_extra_aliases.json")
 TARGET_SAMPLES = 6_000_000
 TOP_K = 5
 MIN_SCORE = 0.17
@@ -436,6 +437,7 @@ def _load_alias_file(path: Path) -> dict[str, str]:
 def load_slang_aliases() -> dict[str, str]:
     aliases = _load_alias_file(SLANG_ALIASES_FILE)
     aliases.update(_load_alias_file(SLANG_PHRASES_FILE))
+    aliases.update(_load_alias_file(EXTRA_ALIASES_FILE))
     return aliases
 
 
@@ -559,6 +561,24 @@ def correct_token(token: str) -> str:
     return token
 
 
+def simplify_repeated_letters(token: str) -> str:
+    if len(token) < 3:
+        return token
+    # "привееет" -> "привет", "пжжж" -> "пж", "ваааще" -> "ваще"
+    token = re.sub(r"([a-zа-я])\1{1,}", r"\1", token)
+    return token
+
+
+def normalize_token_shape(token: str) -> str:
+    if not re.fullmatch(r"[a-zа-я]+", token):
+        return token
+    simplified = simplify_repeated_letters(token)
+    aliases = load_slang_aliases()
+    if simplified in aliases:
+        return aliases[simplified]
+    return simplified
+
+
 def normalize(text: str) -> str:
     text = text.lower().replace("ё", "е")
     text = re.sub(r"[^a-zа-я0-9\s]", " ", text)
@@ -567,7 +587,12 @@ def normalize(text: str) -> str:
         text = re.sub(rf"\b{re.escape(alias)}\b", canonical, text)
     if not text:
         return text
-    text = " ".join(correct_token(token) for token in text.split())
+    normalized_tokens = []
+    for token in text.split():
+        token = normalize_token_shape(token)
+        token = correct_token(token)
+        normalized_tokens.append(token)
+    text = " ".join(normalized_tokens)
     return text
 
 
@@ -577,6 +602,24 @@ def tokenize(text: str) -> list[str]:
 
 def stem(token: str) -> str:
     for suffix in (
+        "ироваться",
+        "ироваться",
+        "ировать",
+        "аться",
+        "яться",
+        "ение",
+        "ений",
+        "ениями",
+        "овать",
+        "евать",
+        "ывать",
+        "ивать",
+        "ание",
+        "ания",
+        "остью",
+        "остей",
+        "ность",
+        "ности",
         "иями",
         "ями",
         "ами",
@@ -612,6 +655,21 @@ def stem(token: str) -> str:
         "ей",
         "ую",
         "юю",
+        "ться",
+        "тся",
+        "ешь",
+        "ишь",
+        "ет",
+        "ит",
+        "ют",
+        "ут",
+        "ем",
+        "им",
+        "ал",
+        "ел",
+        "ил",
+        "ла",
+        "ли",
         "а",
         "я",
         "ы",
