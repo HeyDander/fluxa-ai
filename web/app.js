@@ -24,9 +24,11 @@ const referralCount = document.getElementById("referral-count");
 const tasksList = document.getElementById("tasks-list");
 const tasksOverlay = document.getElementById("tasks-overlay");
 const closeTasksButton = document.getElementById("close-tasks");
+const bonusToast = document.getElementById("bonus-toast");
 
 let authMode = "login";
 let typingNode = null;
+let toastTimer = null;
 
 function setComposerEnabled(enabled) {
   input.disabled = !enabled;
@@ -83,6 +85,22 @@ function hideTyping() {
   }
 }
 
+function showBonusToast(text) {
+  if (!bonusToast || !text) return;
+  bonusToast.textContent = text;
+  bonusToast.classList.remove("hidden");
+  requestAnimationFrame(() => {
+    bonusToast.classList.add("visible");
+  });
+  if (toastTimer) {
+    clearTimeout(toastTimer);
+  }
+  toastTimer = setTimeout(() => {
+    bonusToast.classList.remove("visible");
+    setTimeout(() => bonusToast.classList.add("hidden"), 220);
+  }, 3200);
+}
+
 function setAuthMode(mode) {
   authMode = mode;
   tabLogin.classList.toggle("active", mode === "login");
@@ -126,6 +144,9 @@ function applyUser(user) {
   referralCount.textContent = loggedIn ? `Приглашено: ${user.referrals}` : "Приглашено: 0";
   renderTasks(loggedIn ? user.tasks : []);
   setComposerEnabled(loggedIn);
+  if (loggedIn && user.daily_bonus_awarded) {
+    showBonusToast(`Ежедневный бонус: +${user.daily_bonus_amount} кредитов`);
+  }
   if (loggedIn) {
     input.focus();
   }

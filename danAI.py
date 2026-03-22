@@ -797,6 +797,18 @@ def apply_daily_login_bonus(user: dict) -> bool:
     return True
 
 
+def serialize_user(user: dict, username: str, profile: dict, daily_bonus_awarded: bool = False) -> dict:
+    return {
+        "username": username,
+        "credits": user.get("credits", DEFAULT_CREDITS),
+        "referral_code": user.get("referral_code"),
+        "referrals": user.get("referrals", 0),
+        "tasks": task_state(user, profile),
+        "daily_bonus_awarded": daily_bonus_awarded,
+        "daily_bonus_amount": DAILY_LOGIN_BONUS if daily_bonus_awarded else 0,
+    }
+
+
 def generate_daily_tasks(day: str) -> list[dict]:
     seed = int(hashlib.sha256(day.encode("utf-8")).hexdigest(), 16)
     picker = random.Random(seed)
@@ -1599,16 +1611,11 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
             if not user:
                 return None
             ensure_user_record(username, users)
-            if apply_daily_login_bonus(user):
+            daily_bonus_awarded = apply_daily_login_bonus(user)
+            if daily_bonus_awarded:
                 save_users(users)
             profile = load_user_profile()
-            return {
-                "username": username,
-                "credits": user.get("credits", DEFAULT_CREDITS),
-                "referral_code": user.get("referral_code"),
-                "referrals": user.get("referrals", 0),
-                "tasks": task_state(user, profile),
-            }
+            return serialize_user(user, username, profile, daily_bonus_awarded=daily_bonus_awarded)
 
         def do_GET(self) -> None:
             if self.path in {"/", "/index.html"}:
@@ -1670,13 +1677,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 token = secrets.token_hex(24)
                 sessions[token] = username
                 save_sessions(sessions)
-                response_user = {
-                    "username": username,
-                    "credits": users[username].get("credits", DEFAULT_CREDITS),
-                    "referral_code": users[username].get("referral_code"),
-                    "referrals": users[username].get("referrals", 0),
-                    "tasks": task_state(users[username], load_user_profile()),
-                }
+                response_user = serialize_user(users[username], username, load_user_profile(), daily_bonus_awarded=True)
                 return self._send_json(
                     {"ok": True, "user": response_user},
                     headers={"Set-Cookie": f"fluxa_ai_session={token}; HttpOnly; Path=/; SameSite=Lax"},
@@ -1692,18 +1693,12 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 if not user or not verify_password(password, user["salt"], user["password_hash"]):
                     return self._send_json({"error": "Неверный логин или пароль."}, status=401)
                 ensure_user_record(username, users)
-                apply_daily_login_bonus(user)
+                daily_bonus_awarded = apply_daily_login_bonus(user)
                 save_users(users)
                 token = secrets.token_hex(24)
                 sessions[token] = username
                 save_sessions(sessions)
-                response_user = {
-                    "username": username,
-                    "credits": users[username].get("credits", DEFAULT_CREDITS),
-                    "referral_code": users[username].get("referral_code"),
-                    "referrals": users[username].get("referrals", 0),
-                    "tasks": task_state(users[username], load_user_profile()),
-                }
+                response_user = serialize_user(users[username], username, load_user_profile(), daily_bonus_awarded)
                 return self._send_json(
                     {"ok": True, "user": response_user},
                     headers={"Set-Cookie": f"fluxa_ai_session={token}; HttpOnly; Path=/; SameSite=Lax"},
