@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>fluxa-ai</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-card">
+          <div class="brand-mark">D</div>
+          <div>
+            <p class="brand-kicker">fluxa-ai</p>
+            <h1>Chat</h1>
+          </div>
+        </div>
+
+        <button id="new-chat" class="action-button ghost">Новый чат</button>
+
+        <div class="sidebar-block">
+          <p class="sidebar-label">Возможности</p>
+          <div class="hint-card">
+            Пиши сообщения, проси поиск в интернете и продолжай диалог в браузере.
+          </div>
+        </div>
+
+        <div class="sidebar-block account-block">
+          <p class="sidebar-label">Аккаунт</p>
+          <div id="account-name" class="account-name">Не выполнен вход</div>
+          <button id="logout-button" class="action-button hidden">Выйти</button>
+        </div>
+      </aside>
+
+      <main class="chat-layout">
+        <header class="topbar">
+          <div>
+            <p class="topbar-kicker">White Purple UI</p>
+            <h2>Болталка как приложение</h2>
+          </div>
+        </header>
+
+        <section id="messages" class="messages">
+          <article class="message bot">
+            <div class="avatar">AI</div>
+            <div class="bubble">Привет. Войди в аккаунт или зарегистрируйся, чтобы начать чат.</div>
+          </article>
+        </section>
+
+        <form id="chat-form" class="composer">
+          <input id="chat-input" type="text" placeholder="Напиши сообщение..." autocomplete="off" disabled />
+          <button id="send-button" type="submit" class="action-button" disabled>Отправить</button>
+        </form>
+      </main>
+    </div>
+
+    <div id="auth-overlay" class="auth-overlay">
+      <section class="auth-card">
+        <div class="auth-head">
+          <p class="brand-kicker">fluxa-ai Access</p>
+          <h3>Вход и регистрация</h3>
+          <p class="auth-copy">Локальный аккаунт для доступа к чату.</p>
+        </div>
+
+        <div class="tab-row">
+          <button id="tab-login" class="tab-button active" type="button">Вход</button>
+          <button id="tab-register" class="tab-button" type="button">Регистрация</button>
+        </div>
+
+        <form id="auth-form" class="auth-form">
+          <label>
+            <span>Логин</span>
+            <input id="auth-username" type="text" minlength="3" required />
+          </label>
+          <label>
+            <span>Пароль</span>
+            <input id="auth-password" type="password" minlength="4" required />
+          </label>
+          <button id="auth-submit" class="action-button large" type="submit">Войти</button>
+        </form>
+
+        <p id="auth-error" class="auth-error"></p>
+      </section>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

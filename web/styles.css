@@ -1,0 +1,351 @@
+:root {
+  --bg: #f6f3ff;
+  --bg-strong: #ece5ff;
+  --panel: rgba(255, 255, 255, 0.82);
+  --panel-strong: rgba(255, 255, 255, 0.96);
+  --line: rgba(133, 96, 255, 0.16);
+  --line-strong: rgba(133, 96, 255, 0.28);
+  --text: #21183f;
+  --muted: #7467a2;
+  --accent: #7c4dff;
+  --accent-2: #b197ff;
+  --accent-3: #efe9ff;
+  --shadow: 0 24px 80px rgba(108, 76, 196, 0.18);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: Inter, "Segoe UI", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(124, 77, 255, 0.28), transparent 24%),
+    radial-gradient(circle at bottom right, rgba(177, 151, 255, 0.22), transparent 18%),
+    linear-gradient(180deg, #fbfaff 0%, #f3efff 100%);
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 310px 1fr;
+}
+
+.sidebar {
+  padding: 20px;
+  border-right: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.58);
+  backdrop-filter: blur(18px);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.brand-card,
+.hint-card,
+.account-block,
+.topbar,
+.composer,
+.message .bubble,
+.auth-card {
+  box-shadow: var(--shadow);
+}
+
+.brand-card,
+.hint-card,
+.account-block {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 26px;
+}
+
+.brand-card {
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand-mark {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  color: white;
+  background: linear-gradient(135deg, var(--accent), #9f7bff);
+  font-weight: 800;
+  font-size: 24px;
+}
+
+.brand-card h1,
+.topbar h2,
+.auth-card h3,
+.brand-kicker,
+.topbar-kicker,
+.sidebar-label,
+.auth-copy,
+.account-name {
+  margin: 0;
+}
+
+.brand-kicker,
+.topbar-kicker,
+.sidebar-label {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.sidebar-block {
+  display: grid;
+  gap: 10px;
+}
+
+.hint-card,
+.account-block {
+  padding: 16px;
+  line-height: 1.45;
+}
+
+.action-button,
+.tab-button {
+  border: 0;
+  border-radius: 999px;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    background 180ms ease,
+    opacity 180ms ease;
+  cursor: pointer;
+}
+
+.action-button {
+  padding: 14px 18px;
+  color: white;
+  background: linear-gradient(135deg, var(--accent), #9e7dff);
+  box-shadow: 0 12px 26px rgba(124, 77, 255, 0.28);
+  font-weight: 700;
+}
+
+.action-button:hover,
+.tab-button:hover {
+  transform: translateY(-1px) scale(1.01);
+}
+
+.action-button:active,
+.tab-button:active {
+  transform: scale(0.98);
+}
+
+.action-button.ghost {
+  color: var(--accent);
+  background: white;
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 10px 24px rgba(124, 77, 255, 0.12);
+}
+
+.action-button.large {
+  width: 100%;
+  padding: 16px 18px;
+}
+
+.hidden {
+  display: none;
+}
+
+.chat-layout {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 16px;
+  padding: 20px;
+}
+
+.topbar {
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  padding: 22px 24px;
+  background: var(--panel);
+}
+
+.messages {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-right: 4px;
+}
+
+.message {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.message.user {
+  justify-content: flex-end;
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #8f69ff, #c2adff);
+  color: white;
+  font-weight: 800;
+  font-size: 12px;
+}
+
+.message.user .avatar {
+  order: 2;
+  background: linear-gradient(135deg, #2b2253, #6855aa);
+}
+
+.message .bubble {
+  max-width: min(760px, 78%);
+  padding: 16px 18px;
+  border-radius: 24px;
+  border: 1px solid var(--line);
+  background: var(--panel-strong);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message.user .bubble {
+  background: linear-gradient(135deg, #7d54ff, #aa8cff);
+  color: white;
+  border-color: transparent;
+}
+
+.composer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 28px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.composer input,
+.auth-form input {
+  width: 100%;
+  border: 1px solid transparent;
+  outline: none;
+  background: white;
+  color: var(--text);
+  font: inherit;
+  border-radius: 22px;
+  padding: 16px 18px;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.composer input:focus,
+.auth-form input:focus {
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 5px rgba(124, 77, 255, 0.12);
+}
+
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(82, 53, 170, 0.18);
+  backdrop-filter: blur(10px);
+}
+
+.auth-overlay.hidden {
+  display: none;
+}
+
+.auth-card {
+  width: min(460px, calc(100vw - 32px));
+  padding: 28px;
+  border-radius: 30px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.auth-head {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.auth-copy {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.tab-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.tab-button {
+  padding: 12px 14px;
+  background: var(--accent-3);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.tab-button.active {
+  background: linear-gradient(135deg, var(--accent), #ab8cff);
+  color: white;
+  box-shadow: 0 10px 24px rgba(124, 77, 255, 0.22);
+}
+
+.auth-form {
+  display: grid;
+  gap: 14px;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 8px;
+}
+
+.auth-form span {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.auth-error {
+  min-height: 20px;
+  margin: 14px 0 0;
+  color: #bf2f76;
+}
+
+@media (max-width: 920px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .chat-layout {
+    padding: 14px;
+  }
+
+  .message .bubble {
+    max-width: 88%;
+  }
+}
