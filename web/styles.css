@@ -209,6 +209,10 @@ body {
   display: none;
 }
 
+.sheet-overlay.hidden {
+  display: none;
+}
+
 .chat-layout {
   min-height: 100vh;
   display: grid;

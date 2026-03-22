@@ -116,6 +116,10 @@ function applyUser(user) {
   const loggedIn = Boolean(user);
   authOverlay.classList.toggle("hidden", loggedIn);
   logoutButton.classList.toggle("hidden", !loggedIn);
+  tasksButton.classList.toggle("hidden", !loggedIn);
+  if (!loggedIn) {
+    tasksOverlay.classList.add("hidden");
+  }
   accountName.textContent = loggedIn ? `Вход: ${user.username}` : "Не выполнен вход";
   creditsBalance.textContent = loggedIn ? `${user.credits} кредитов` : "0 кредитов";
   referralCode.textContent = loggedIn ? `Код: ${user.referral_code}` : "Код: -";
