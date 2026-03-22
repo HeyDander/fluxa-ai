@@ -39,6 +39,7 @@ CHATS_FILE = MODEL_DIR / "chats.json"
 SESSIONS_FILE = MODEL_DIR / "sessions.json"
 PROMOS_FILE = MODEL_DIR / "promos.json"
 WORDS_DB_FILE = Path("data/ru_RU.dic")
+SLANG_ALIASES_FILE = Path("data/ru_slang_aliases.json")
 TARGET_SAMPLES = 6_000_000
 TOP_K = 5
 MIN_SCORE = 0.17
@@ -411,6 +412,31 @@ def load_dotenv(path: Path = ENV_FILE) -> None:
 
 
 @lru_cache(maxsize=1)
+def load_slang_aliases() -> dict[str, str]:
+    if not SLANG_ALIASES_FILE.exists():
+        return {}
+    try:
+        payload = json.loads(SLANG_ALIASES_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+    aliases: dict[str, str] = {}
+    for key, value in payload.items():
+        normalized_key = str(key).strip().lower().replace("ё", "е")
+        normalized_value = str(value).strip().lower().replace("ё", "е")
+        if normalized_key and normalized_value:
+            aliases[normalized_key] = normalized_value
+    return aliases
+
+
+@lru_cache(maxsize=1)
+def all_text_aliases() -> tuple[tuple[str, str], ...]:
+    merged = dict(LATIN_ALIASES)
+    merged.update(load_slang_aliases())
+    return tuple(sorted(merged.items(), key=lambda item: (-len(item[0]), item[0])))
+
+
+@lru_cache(maxsize=1)
 def load_known_words() -> tuple[set[str], dict[tuple[str, int], tuple[str, ...]], dict[tuple[str, int], tuple[str, ...]]]:
     if not WORDS_DB_FILE.exists():
         return set(), {}, {}
@@ -527,8 +553,8 @@ def normalize(text: str) -> str:
     text = text.lower().replace("ё", "е")
     text = re.sub(r"[^a-zа-я0-9\s]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
-    for latin, cyrillic in LATIN_ALIASES.items():
-        text = re.sub(rf"\b{re.escape(latin)}\b", cyrillic, text)
+    for alias, canonical in all_text_aliases():
+        text = re.sub(rf"\b{re.escape(alias)}\b", canonical, text)
     if not text:
         return text
     text = " ".join(correct_token(token) for token in text.split())
