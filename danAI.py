@@ -361,6 +361,7 @@ MIN_TASK_REWARD = 20
 PROMO_DEFINITIONS = {
     "fluxa-0": {"reward": 30, "max_uses": 5},
     "fluxa-exe": {"reward": 30, "max_uses": 5},
+    "obnova-fluxa": {"reward": 80, "max_uses": 10}
 }
 
 TASK_POOL = [
