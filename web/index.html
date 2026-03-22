@@ -20,6 +20,7 @@
         <div class="sidebar-actions">
           <button id="new-chat" class="action-button ghost">Новый чат</button>
           <button id="tasks-button" class="action-button ghost hidden">Задания</button>
+          <button id="promo-button" class="action-button ghost hidden">Промокод</button>
           <button id="delete-chat" class="action-button ghost danger">Удалить чат</button>
         </div>
 
@@ -125,6 +126,26 @@
           <button id="close-tasks" class="action-button ghost small" type="button">Закрыть</button>
         </div>
         <div id="tasks-list" class="tasks-list"></div>
+      </section>
+    </div>
+
+    <div id="promo-overlay" class="sheet-overlay hidden">
+      <section class="sheet-card">
+        <div class="sheet-head">
+          <div>
+            <p class="brand-kicker">fluxa-ai Promo</p>
+            <h3>Промокод</h3>
+          </div>
+          <button id="close-promo" class="action-button ghost small" type="button">Закрыть</button>
+        </div>
+        <form id="promo-form" class="auth-form">
+          <label>
+            <span>Введи промокод</span>
+            <input id="promo-input" type="text" autocomplete="off" />
+          </label>
+          <button class="action-button" type="submit">Активировать</button>
+        </form>
+        <p id="promo-error" class="auth-error"></p>
       </section>
     </div>
 

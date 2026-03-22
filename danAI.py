@@ -36,6 +36,7 @@ PROFILE_FILE = MODEL_DIR / "user_profile.json"
 USERS_FILE = MODEL_DIR / "users.json"
 CHATS_FILE = MODEL_DIR / "chats.json"
 SESSIONS_FILE = MODEL_DIR / "sessions.json"
+PROMOS_FILE = MODEL_DIR / "promos.json"
 TARGET_SAMPLES = 6_000_000
 TOP_K = 5
 MIN_SCORE = 0.17
@@ -349,6 +350,10 @@ REFERRAL_BONUS = 20
 DAILY_LOGIN_BONUS = 10
 DAILY_TASK_COUNT = 20
 MIN_TASK_REWARD = 15
+PROMO_DEFINITIONS = {
+    "fluxa-0": {"reward": 30, "max_uses": 5},
+    "fluxa-exe": {"reward": 30, "max_uses": 5},
+}
 
 TASK_POOL = [
     {"id": "msg_1", "title": "Первый шаг", "description": "Отправь 1 сообщение сегодня", "reward": 15, "kind": "messages_sent", "target": 1},
@@ -750,6 +755,20 @@ def save_sessions(sessions: dict, path: Path = SESSIONS_FILE) -> None:
     save_state("sessions", sessions, path)
 
 
+def load_promos(path: Path = PROMOS_FILE) -> dict:
+    promos = load_state("promos", path)
+    for code, meta in PROMO_DEFINITIONS.items():
+        state = promos.setdefault(code, {})
+        state.setdefault("reward", meta["reward"])
+        state.setdefault("max_uses", meta["max_uses"])
+        state.setdefault("used_by", [])
+    return promos
+
+
+def save_promos(promos: dict, path: Path = PROMOS_FILE) -> None:
+    save_state("promos", promos, path)
+
+
 def ensure_user_record(username: str, users: dict) -> dict:
     user = users.setdefault(
         username,
@@ -765,6 +784,7 @@ def ensure_user_record(username: str, users: dict) -> dict:
             "daily_completed_tasks": [],
             "last_daily_bonus_day": "",
             "credit_history": [],
+            "redeemed_promos": [],
             "claimed_tasks": [],
             "completed_tasks": [],
         },
@@ -780,6 +800,7 @@ def ensure_user_record(username: str, users: dict) -> dict:
     user.setdefault("daily_completed_tasks", [])
     user.setdefault("last_daily_bonus_day", "")
     user.setdefault("credit_history", [])
+    user.setdefault("redeemed_promos", [])
     user.setdefault("claimed_tasks", [])
     user.setdefault("completed_tasks", [])
     ensure_daily_tasks(user)
@@ -1593,6 +1614,12 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
         def _save_sessions(self, sessions: dict) -> None:
             save_sessions(sessions)
 
+        def _load_promos(self) -> dict:
+            return load_promos()
+
+        def _save_promos(self, promos: dict) -> None:
+            save_promos(promos)
+
         def _send_json(self, payload: dict, status: int = 200, headers: dict | None = None) -> None:
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(status)
@@ -1695,6 +1722,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     "daily_completed_tasks": [],
                     "last_daily_bonus_day": "",
                     "credit_history": [],
+                    "redeemed_promos": [],
                     "claimed_tasks": [],
                     "completed_tasks": [],
                 }
@@ -1781,6 +1809,41 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 record_credit_event(user, task["reward"], "Начисление", f"Награда за задание: {task['title']}")
                 self._save_users(users)
                 return self._send_json({"ok": True, "user": self._current_user()})
+
+            if self.path == "/api/promo/redeem":
+                current = self._current_user()
+                if not current:
+                    return self._send_json({"error": "Нужен вход в аккаунт."}, status=401)
+                payload = self._read_json()
+                if payload is None:
+                    return self._send_json({"error": "Invalid JSON"}, status=400)
+                code = str(payload.get("code", "")).strip().lower()
+                if not code:
+                    return self._send_json({"error": "Введи промокод."}, status=400)
+                promos = self._load_promos()
+                promo = promos.get(code)
+                if not promo:
+                    return self._send_json({"error": "Такого промокода нет."}, status=404)
+
+                username = current["username"]
+                users = self._load_users()
+                user = ensure_user_record(username, users)
+                redeemed = set(user.get("redeemed_promos", []))
+                used_by = set(promo.get("used_by", []))
+
+                if code in redeemed:
+                    return self._send_json({"error": "Ты уже использовал этот промокод."}, status=400)
+                if len(used_by) >= int(promo.get("max_uses", 0)):
+                    return self._send_json({"error": "Лимит активаций этого промокода уже исчерпан."}, status=400)
+
+                reward = int(promo.get("reward", 0))
+                user.setdefault("redeemed_promos", []).append(code)
+                user["credits"] = user.get("credits", DEFAULT_CREDITS) + reward
+                promo.setdefault("used_by", []).append(username)
+                record_credit_event(user, reward, "Начисление", "Промокод активирован")
+                self._save_users(users)
+                self._save_promos(promos)
+                return self._send_json({"ok": True, "message": f"Промокод принят. +{reward} кредитов.", "user": self._current_user()})
 
             if self.path == "/api/chat/clear":
                 current = self._current_user()

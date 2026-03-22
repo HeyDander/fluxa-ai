@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 model_store/chat_index.json
 model_store/chats.json
+model_store/promos.json
 model_store/sessions.json
 model_store/user_memory.txt
 model_store/user_profile.json

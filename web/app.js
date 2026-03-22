@@ -4,6 +4,7 @@ const input = document.getElementById("chat-input");
 const sendButton = document.getElementById("send-button");
 const newChatButton = document.getElementById("new-chat");
 const tasksButton = document.getElementById("tasks-button");
+const promoButton = document.getElementById("promo-button");
 const deleteChatButton = document.getElementById("delete-chat");
 const logoutButton = document.getElementById("logout-button");
 const accountName = document.getElementById("account-name");
@@ -25,6 +26,11 @@ const creditHistory = document.getElementById("credit-history");
 const tasksList = document.getElementById("tasks-list");
 const tasksOverlay = document.getElementById("tasks-overlay");
 const closeTasksButton = document.getElementById("close-tasks");
+const promoOverlay = document.getElementById("promo-overlay");
+const closePromoButton = document.getElementById("close-promo");
+const promoForm = document.getElementById("promo-form");
+const promoInput = document.getElementById("promo-input");
+const promoError = document.getElementById("promo-error");
 const bonusToast = document.getElementById("bonus-toast");
 
 let authMode = "login";
@@ -136,8 +142,10 @@ function applyUser(user) {
   authOverlay.classList.toggle("hidden", loggedIn);
   logoutButton.classList.toggle("hidden", !loggedIn);
   tasksButton.classList.toggle("hidden", !loggedIn);
+  promoButton.classList.toggle("hidden", !loggedIn);
   if (!loggedIn) {
     tasksOverlay.classList.add("hidden");
+    promoOverlay.classList.add("hidden");
   }
   accountName.textContent = loggedIn ? `Вход: ${user.username}` : "Не выполнен вход";
   creditsBalance.textContent = loggedIn ? `${user.credits} кредитов` : "0 кредитов";
@@ -294,6 +302,33 @@ tasksButton.addEventListener("click", () => {
 
 closeTasksButton.addEventListener("click", () => {
   tasksOverlay.classList.add("hidden");
+});
+
+promoButton.addEventListener("click", () => {
+  promoError.textContent = "";
+  promoInput.value = "";
+  promoOverlay.classList.remove("hidden");
+  promoInput.focus();
+});
+
+closePromoButton.addEventListener("click", () => {
+  promoOverlay.classList.add("hidden");
+});
+
+promoForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  promoError.textContent = "";
+  try {
+    const data = await request("/api/promo/redeem", { code: promoInput.value.trim() });
+    if (data.user) {
+      applyUser(data.user);
+    }
+    promoOverlay.classList.add("hidden");
+    promoInput.value = "";
+    showBonusToast(data.message || "Промокод активирован");
+  } catch (error) {
+    promoError.textContent = error.message;
+  }
 });
 
 deleteChatButton.addEventListener("click", async () => {
