@@ -28,6 +28,7 @@ INDEX_FILE = MODEL_DIR / "chat_index.json"
 MEMORY_FILE = MODEL_DIR / "user_memory.txt"
 PROFILE_FILE = MODEL_DIR / "user_profile.json"
 USERS_FILE = MODEL_DIR / "users.json"
+CHATS_FILE = MODEL_DIR / "chats.json"
 TARGET_SAMPLES = 6_000_000
 TOP_K = 5
 MIN_SCORE = 0.17
@@ -335,6 +336,33 @@ NUMBER_WORDS = {
     "десять": "10",
 }
 
+DEFAULT_CREDITS = 20
+MESSAGE_COST = 1
+REFERRAL_BONUS = 10
+
+TASK_DEFINITIONS = {
+    "first_message": {
+        "title": "Первая реплика",
+        "description": "Отправь первое сообщение в чат",
+        "reward": 5,
+    },
+    "use_search": {
+        "title": "Интернет-поиск",
+        "description": "Используй поиск в интернете хотя бы один раз",
+        "reward": 5,
+    },
+    "tell_name": {
+        "title": "Представься",
+        "description": "Напиши боту своё имя",
+        "reward": 5,
+    },
+    "five_messages": {
+        "title": "Небольшой диалог",
+        "description": "Отправь 5 сообщений",
+        "reward": 10,
+    },
+}
+
 
 @dataclass
 class DialoguePair:
@@ -636,6 +664,75 @@ def save_users(users: dict, path: Path = USERS_FILE) -> None:
     path.write_text(json.dumps(users, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def load_chats(path: Path = CHATS_FILE) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def save_chats(chats: dict, path: Path = CHATS_FILE) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(chats, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def ensure_user_record(username: str, users: dict) -> dict:
+    user = users.setdefault(
+        username,
+        {
+            "credits": DEFAULT_CREDITS,
+            "referral_code": secrets.token_hex(4),
+            "referred_by": None,
+            "referrals": 0,
+            "stats": {"messages_sent": 0, "searches_used": 0},
+            "claimed_tasks": [],
+            "completed_tasks": [],
+        },
+    )
+    user.setdefault("credits", DEFAULT_CREDITS)
+    user.setdefault("referral_code", secrets.token_hex(4))
+    user.setdefault("referred_by", None)
+    user.setdefault("referrals", 0)
+    user.setdefault("stats", {"messages_sent": 0, "searches_used": 0})
+    user.setdefault("claimed_tasks", [])
+    user.setdefault("completed_tasks", [])
+    return user
+
+
+def task_state(user: dict, profile: dict | None = None) -> list[dict]:
+    stats = user.get("stats", {})
+    profile = profile or {}
+    completed = set(user.get("completed_tasks", []))
+    claimed = set(user.get("claimed_tasks", []))
+
+    if stats.get("messages_sent", 0) >= 1:
+        completed.add("first_message")
+    if stats.get("messages_sent", 0) >= 5:
+        completed.add("five_messages")
+    if stats.get("searches_used", 0) >= 1:
+        completed.add("use_search")
+    if profile.get("name"):
+        completed.add("tell_name")
+
+    user["completed_tasks"] = sorted(completed)
+
+    result = []
+    for task_id, meta in TASK_DEFINITIONS.items():
+        result.append(
+            {
+                "id": task_id,
+                "title": meta["title"],
+                "description": meta["description"],
+                "reward": meta["reward"],
+                "completed": task_id in completed,
+                "claimed": task_id in claimed,
+            }
+        )
+    return result
+
+
 def hash_password(password: str, salt: str | None = None) -> tuple[str, str]:
     salt = salt or secrets.token_hex(16)
     digest = hashlib.sha256(f"{salt}:{password}".encode("utf-8")).hexdigest()
@@ -800,10 +897,29 @@ class SmartChatBot:
         snippets = serpapi_search(query)
         if not snippets:
             if os.getenv("SERPAPI_KEY", ""):
-                return "Ничего внятного не нашёл через поиск. Попробуй уточнить запрос. 🌐"
+                return "Я поискал, но нормального ответа не нашёл. Попробуй уточнить запрос. 🌐"
             return "Поиск не настроен. Добавь `SERPAPI_KEY` в переменные окружения, и я смогу искать в интернете. 🌐"
 
-        answer = "Вот что нашёл: " + " ".join(snippets[:2])
+        answer = "Я нашёл вот что: " + " ".join(snippets[:2])
+        return self._add_emoji(answer, message)
+
+    def _auto_search_answer(self, message: str) -> str | None:
+        if self._is_bot_directed(message):
+            return None
+        if not os.getenv("SERPAPI_KEY", "") or os.getenv("SERPAPI_KEY", "") == "put_your_serpapi_key_here":
+            return None
+
+        normalized = normalize(message)
+        if detect_intent(message) in {"greeting", "thanks", "bye", "laugh", "state_good", "state_bad"}:
+            return None
+        if len(extract_keywords(message)) < 2:
+            return None
+
+        snippets = serpapi_search(normalized, max_results=2)
+        if not snippets:
+            return None
+
+        answer = "Я не был уверен, поэтому поискал в интернете. Вот что нашёл: " + " ".join(snippets)
         return self._add_emoji(answer, message)
 
     def _extract_search_followup(self, message: str) -> str | None:
@@ -1187,6 +1303,11 @@ class SmartChatBot:
 
         matches = self._best_matches(cleaned)
         if not matches or matches[0][0] < MIN_SCORE:
+            auto_search = self._auto_search_answer(cleaned)
+            if auto_search:
+                self.history.append((cleaned, auto_search))
+                self.history = self.history[-8:]
+                return auto_search
             if len(extract_keywords(cleaned)) <= 3:
                 answer = self._short_uncertain_answer(cleaned)
             else:
@@ -1201,6 +1322,13 @@ class SmartChatBot:
             self.history.append((cleaned, answer))
             self.history = self.history[-8:]
             return answer
+
+        if matches[0][0] < 0.32:
+            auto_search = self._auto_search_answer(cleaned)
+            if auto_search:
+                self.history.append((cleaned, auto_search))
+                self.history = self.history[-8:]
+                return auto_search
 
         answer = self._generate_freeform_answer(cleaned, matches)
         self.history.append((cleaned, answer))
@@ -1247,6 +1375,7 @@ def run_chat(bot: SmartChatBot) -> None:
 
 def make_handler(bot: SmartChatBot, web_dir: Path):
     users = load_users()
+    chats = load_chats()
     sessions: dict[str, str] = {}
 
     class ChatHandler(BaseHTTPRequestHandler):
@@ -1299,7 +1428,15 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
             user = users.get(username)
             if not user:
                 return None
-            return {"username": username}
+            ensure_user_record(username, users)
+            profile = load_user_profile()
+            return {
+                "username": username,
+                "credits": user.get("credits", DEFAULT_CREDITS),
+                "referral_code": user.get("referral_code"),
+                "referrals": user.get("referrals", 0),
+                "tasks": task_state(user, profile),
+            }
 
         def do_GET(self) -> None:
             if self.path in {"/", "/index.html"}:
@@ -1312,7 +1449,8 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 return self._send_json({"ok": True})
             if self.path == "/api/me":
                 user = self._current_user()
-                return self._send_json({"user": user})
+                history = chats.get(user["username"], []) if user else []
+                return self._send_json({"user": user, "history": history})
             self.send_error(HTTPStatus.NOT_FOUND)
 
         def do_POST(self) -> None:
@@ -1326,13 +1464,35 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     return self._send_json({"error": "Логин от 3 символов, пароль от 4."}, status=400)
                 if username in users:
                     return self._send_json({"error": "Такой пользователь уже существует."}, status=400)
+                referral_code = str(payload.get("referral_code", "")).strip()
                 salt, password_hash = hash_password(password)
-                users[username] = {"salt": salt, "password_hash": password_hash}
+                users[username] = {
+                    "salt": salt,
+                    "password_hash": password_hash,
+                    "credits": DEFAULT_CREDITS,
+                    "referral_code": secrets.token_hex(4),
+                    "referred_by": None,
+                    "referrals": 0,
+                    "stats": {"messages_sent": 0, "searches_used": 0},
+                    "claimed_tasks": [],
+                    "completed_tasks": [],
+                }
+                new_user = users[username]
+                if referral_code:
+                    for existing_username, existing_user in users.items():
+                        if existing_username == username:
+                            continue
+                        if existing_user.get("referral_code") == referral_code:
+                            new_user["referred_by"] = existing_username
+                            new_user["credits"] += REFERRAL_BONUS
+                            existing_user["credits"] = existing_user.get("credits", DEFAULT_CREDITS) + REFERRAL_BONUS
+                            existing_user["referrals"] = existing_user.get("referrals", 0) + 1
+                            break
                 save_users(users)
                 token = secrets.token_hex(24)
                 sessions[token] = username
                 return self._send_json(
-                    {"ok": True, "user": {"username": username}},
+                    {"ok": True, "user": self._current_user()},
                     headers={"Set-Cookie": f"fluxa_ai_session={token}; HttpOnly; Path=/; SameSite=Lax"},
                 )
 
@@ -1345,10 +1505,11 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 user = users.get(username)
                 if not user or not verify_password(password, user["salt"], user["password_hash"]):
                     return self._send_json({"error": "Неверный логин или пароль."}, status=401)
+                ensure_user_record(username, users)
                 token = secrets.token_hex(24)
                 sessions[token] = username
                 return self._send_json(
-                    {"ok": True, "user": {"username": username}},
+                    {"ok": True, "user": self._current_user()},
                     headers={"Set-Cookie": f"fluxa_ai_session={token}; HttpOnly; Path=/; SameSite=Lax"},
                 )
 
@@ -1361,11 +1522,44 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     headers={"Set-Cookie": "fluxa_ai_session=; Max-Age=0; Path=/; SameSite=Lax"},
                 )
 
+            if self.path == "/api/tasks/claim":
+                current = self._current_user()
+                if not current:
+                    return self._send_json({"error": "Нужен вход в аккаунт."}, status=401)
+                payload = self._read_json()
+                if payload is None:
+                    return self._send_json({"error": "Invalid JSON"}, status=400)
+                task_id = str(payload.get("task_id", "")).strip()
+                username = current["username"]
+                user = ensure_user_record(username, users)
+                current_tasks = {item["id"]: item for item in task_state(user, load_user_profile())}
+                task = current_tasks.get(task_id)
+                if not task:
+                    return self._send_json({"error": "Такого задания нет."}, status=404)
+                if not task["completed"]:
+                    return self._send_json({"error": "Задание ещё не выполнено."}, status=400)
+                if task["claimed"]:
+                    return self._send_json({"error": "Награда уже получена."}, status=400)
+                user["claimed_tasks"].append(task_id)
+                user["credits"] = user.get("credits", DEFAULT_CREDITS) + task["reward"]
+                save_users(users)
+                return self._send_json({"ok": True, "user": self._current_user()})
+
+            if self.path == "/api/chat/clear":
+                current = self._current_user()
+                if not current:
+                    return self._send_json({"error": "Нужен вход в аккаунт."}, status=401)
+                username = current["username"]
+                chats[username] = []
+                save_chats(chats)
+                return self._send_json({"ok": True})
+
             if self.path != "/api/chat":
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
 
-            if not self._current_user():
+            current = self._current_user()
+            if not current:
                 return self._send_json({"error": "Нужен вход в аккаунт."}, status=401)
 
             payload = self._read_json()
@@ -1376,8 +1570,27 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
             if not message:
                 return self._send_json({"error": "Empty message"}, status=400)
 
+            username = current["username"]
+            user = ensure_user_record(username, users)
+            if user.get("credits", DEFAULT_CREDITS) < MESSAGE_COST:
+                return self._send_json({"error": "Кредиты закончились. Выполни задания или пригласи друга."}, status=402)
+
             answer = bot.reply(message)
-            return self._send_json({"reply": answer})
+            user["credits"] -= MESSAGE_COST
+            user["stats"]["messages_sent"] = user["stats"].get("messages_sent", 0) + 1
+            if "Я нашёл вот что:" in answer or "поискал в интернете" in answer:
+                user["stats"]["searches_used"] = user["stats"].get("searches_used", 0) + 1
+            chats.setdefault(username, []).extend(
+                [
+                    {"role": "user", "text": message},
+                    {"role": "bot", "text": answer},
+                ]
+            )
+            chats[username] = chats[username][-100:]
+            task_state(user, load_user_profile())
+            save_users(users)
+            save_chats(chats)
+            return self._send_json({"reply": answer, "user": self._current_user()})
 
         def log_message(self, format: str, *args) -> None:
             return

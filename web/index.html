@@ -17,13 +17,37 @@
           </div>
         </div>
 
-        <button id="new-chat" class="action-button ghost">Новый чат</button>
+        <div class="sidebar-actions">
+          <button id="new-chat" class="action-button ghost">Новый чат</button>
+          <button id="delete-chat" class="action-button ghost danger">Удалить чат</button>
+        </div>
 
         <div class="sidebar-block">
           <p class="sidebar-label">Возможности</p>
           <div class="hint-card">
             Пиши сообщения, проси поиск в интернете и продолжай диалог в браузере.
           </div>
+        </div>
+
+        <div class="sidebar-block">
+          <p class="sidebar-label">Баланс</p>
+          <div class="hint-card">
+            <div id="credits-balance" class="stat-big">0 кредитов</div>
+            <div class="hint-small">Каждое сообщение списывает 1 кредит.</div>
+          </div>
+        </div>
+
+        <div class="sidebar-block">
+          <p class="sidebar-label">Рефералы</p>
+          <div class="hint-card">
+            <div id="referral-code" class="ref-code">Код: -</div>
+            <div id="referral-count" class="hint-small">Приглашено: 0</div>
+          </div>
+        </div>
+
+        <div class="sidebar-block">
+          <p class="sidebar-label">Задания</p>
+          <div id="tasks-list" class="tasks-list"></div>
         </div>
 
         <div class="sidebar-block account-block">
@@ -76,6 +100,10 @@
           <label>
             <span>Пароль</span>
             <input id="auth-password" type="password" minlength="4" required />
+          </label>
+          <label id="referral-field" class="hidden">
+            <span>Реферальный код</span>
+            <input id="auth-referral" type="text" />
           </label>
           <button id="auth-submit" class="action-button large" type="submit">Войти</button>
         </form>

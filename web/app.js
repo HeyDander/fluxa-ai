@@ -3,6 +3,7 @@ const form = document.getElementById("chat-form");
 const input = document.getElementById("chat-input");
 const sendButton = document.getElementById("send-button");
 const newChatButton = document.getElementById("new-chat");
+const deleteChatButton = document.getElementById("delete-chat");
 const logoutButton = document.getElementById("logout-button");
 const accountName = document.getElementById("account-name");
 
@@ -14,8 +15,15 @@ const authUsername = document.getElementById("auth-username");
 const authPassword = document.getElementById("auth-password");
 const tabLogin = document.getElementById("tab-login");
 const tabRegister = document.getElementById("tab-register");
+const referralField = document.getElementById("referral-field");
+const authReferral = document.getElementById("auth-referral");
+const creditsBalance = document.getElementById("credits-balance");
+const referralCode = document.getElementById("referral-code");
+const referralCount = document.getElementById("referral-count");
+const tasksList = document.getElementById("tasks-list");
 
 let authMode = "login";
+let typingNode = null;
 
 function setComposerEnabled(enabled) {
   input.disabled = !enabled;
@@ -45,10 +53,38 @@ function appendMessage(role, text) {
   messages.scrollTop = messages.scrollHeight;
 }
 
+function showTyping(text = "Думаю...") {
+  hideTyping();
+  const article = document.createElement("article");
+  article.className = "message bot typing";
+
+  const avatar = document.createElement("div");
+  avatar.className = "avatar";
+  avatar.textContent = "AI";
+
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.innerHTML = `<span>${text}</span><div class="typing-dots"><i></i><i></i><i></i></div>`;
+
+  article.appendChild(avatar);
+  article.appendChild(bubble);
+  messages.appendChild(article);
+  messages.scrollTop = messages.scrollHeight;
+  typingNode = article;
+}
+
+function hideTyping() {
+  if (typingNode) {
+    typingNode.remove();
+    typingNode = null;
+  }
+}
+
 function setAuthMode(mode) {
   authMode = mode;
   tabLogin.classList.toggle("active", mode === "login");
   tabRegister.classList.toggle("active", mode === "register");
+  referralField.classList.toggle("hidden", mode !== "register");
   authSubmit.textContent = mode === "login" ? "Войти" : "Создать аккаунт";
   authError.textContent = "";
 }
@@ -78,9 +114,59 @@ function applyUser(user) {
   authOverlay.classList.toggle("hidden", loggedIn);
   logoutButton.classList.toggle("hidden", !loggedIn);
   accountName.textContent = loggedIn ? `Вход: ${user.username}` : "Не выполнен вход";
+  creditsBalance.textContent = loggedIn ? `${user.credits} кредитов` : "0 кредитов";
+  referralCode.textContent = loggedIn ? `Код: ${user.referral_code}` : "Код: -";
+  referralCount.textContent = loggedIn ? `Приглашено: ${user.referrals}` : "Приглашено: 0";
+  renderTasks(loggedIn ? user.tasks : []);
   setComposerEnabled(loggedIn);
   if (loggedIn) {
     input.focus();
+  }
+}
+
+function renderTasks(tasks) {
+  tasksList.innerHTML = "";
+  for (const task of tasks || []) {
+    const card = document.createElement("div");
+    card.className = "task-card";
+
+    const title = document.createElement("div");
+    title.className = "task-title";
+    title.textContent = `${task.title} · +${task.reward}`;
+
+    const desc = document.createElement("div");
+    desc.className = "hint-small";
+    desc.textContent = task.description;
+
+    const button = document.createElement("button");
+    button.className = "action-button ghost task-button";
+    if (task.claimed) {
+      button.textContent = "Получено";
+      button.disabled = true;
+    } else if (task.completed) {
+      button.textContent = "Забрать";
+      button.addEventListener("click", async () => {
+        const data = await request("/api/tasks/claim", { task_id: task.id });
+        applyUser(data.user);
+      });
+    } else {
+      button.textContent = "Не выполнено";
+      button.disabled = true;
+    }
+
+    card.append(title, desc, button);
+    tasksList.appendChild(card);
+  }
+}
+
+function renderHistory(history) {
+  messages.innerHTML = "";
+  if (!history || history.length === 0) {
+    appendMessage("bot", "Привет. Напиши сообщение, и я отвечу.");
+    return;
+  }
+  for (const item of history) {
+    appendMessage(item.role, item.text);
   }
 }
 
@@ -88,6 +174,7 @@ async function boot() {
   try {
     const data = await request("/api/me");
     applyUser(data.user);
+    renderHistory(data.history);
   } catch {
     applyUser(null);
   }
@@ -103,10 +190,12 @@ authForm.addEventListener("submit", async (event) => {
     const data = await request(path, {
       username: authUsername.value.trim(),
       password: authPassword.value,
+      referral_code: authReferral.value.trim(),
     });
     applyUser(data.user);
     clearMessages();
     authPassword.value = "";
+    authReferral.value = "";
   } catch (error) {
     authError.textContent = error.message;
   } finally {
@@ -126,6 +215,11 @@ newChatButton.addEventListener("click", () => {
   clearMessages();
 });
 
+deleteChatButton.addEventListener("click", async () => {
+  await request("/api/chat/clear", {});
+  clearMessages();
+});
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const message = input.value.trim();
@@ -134,13 +228,20 @@ form.addEventListener("submit", async (event) => {
   appendMessage("user", message);
   input.value = "";
   setComposerEnabled(false);
+  showTyping(/ищи|найди|что такое|че такое/i.test(message) ? "Ищу..." : "Думаю...");
 
   try {
     const data = await request("/api/chat", { message });
+    hideTyping();
     appendMessage("bot", data.reply);
+    if (data.user) {
+      applyUser(data.user);
+    }
   } catch (error) {
+    hideTyping();
     appendMessage("bot", error.message);
   } finally {
+    hideTyping();
     setComposerEnabled(true);
     input.focus();
   }

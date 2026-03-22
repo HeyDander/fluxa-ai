@@ -110,10 +110,48 @@ body {
   gap: 10px;
 }
 
+.sidebar-actions {
+  display: grid;
+  gap: 10px;
+}
+
 .hint-card,
 .account-block {
   padding: 16px;
   line-height: 1.45;
+}
+
+.hint-small {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.stat-big,
+.ref-code {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.tasks-list {
+  display: grid;
+  gap: 10px;
+}
+
+.task-card {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 20px;
+  padding: 14px;
+}
+
+.task-title {
+  font-weight: 700;
+}
+
+.task-button {
+  margin-top: 12px;
+  width: 100%;
 }
 
 .action-button,
@@ -151,6 +189,11 @@ body {
   background: white;
   border: 1px solid var(--line-strong);
   box-shadow: 0 10px 24px rgba(124, 77, 255, 0.12);
+}
+
+.action-button.danger {
+  color: #c53f7a;
+  border-color: rgba(197, 63, 122, 0.24);
 }
 
 .action-button.large {
@@ -228,6 +271,35 @@ body {
   background: linear-gradient(135deg, #7d54ff, #aa8cff);
   color: white;
   border-color: transparent;
+}
+
+.message.typing .bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.typing-dots i {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  opacity: 0.35;
+  animation: pulseDots 1s infinite ease-in-out;
+}
+
+.typing-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typing-dots i:nth-child(3) {
+  animation-delay: 0.3s;
 }
 
 .composer {
@@ -330,6 +402,20 @@ body {
   min-height: 20px;
   margin: 14px 0 0;
   color: #bf2f76;
+}
+
+@keyframes pulseDots {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
 }
 
 @media (max-width: 920px) {
