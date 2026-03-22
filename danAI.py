@@ -348,46 +348,46 @@ NUMBER_WORDS = {
     "десять": "10",
 }
 
-DEFAULT_CREDITS = 120
+DEFAULT_CREDITS = 400
 MESSAGE_COST = 1
 REFERRAL_BONUS = 20
 DAILY_LOGIN_BONUS = 10
 DAILY_TASK_COUNT = 20
-MIN_TASK_REWARD = 15
+MIN_TASK_REWARD = 20
 PROMO_DEFINITIONS = {
     "fluxa-0": {"reward": 30, "max_uses": 5},
     "fluxa-exe": {"reward": 30, "max_uses": 5},
 }
 
 TASK_POOL = [
-    {"id": "msg_1", "title": "Первый шаг", "description": "Отправь 1 сообщение сегодня", "reward": 15, "kind": "messages_sent", "target": 1},
-    {"id": "msg_3", "title": "Разогрев", "description": "Отправь 3 сообщения сегодня", "reward": 15, "kind": "messages_sent", "target": 3},
-    {"id": "msg_5", "title": "Диалог", "description": "Отправь 5 сообщений сегодня", "reward": 15, "kind": "messages_sent", "target": 5},
+    {"id": "msg_1", "title": "Первый шаг", "description": "Отправь 1 сообщение сегодня", "reward": 20, "kind": "messages_sent", "target": 1},
+    {"id": "msg_3", "title": "Разогрев", "description": "Отправь 3 сообщения сегодня", "reward": 20, "kind": "messages_sent", "target": 3},
+    {"id": "msg_5", "title": "Диалог", "description": "Отправь 5 сообщений сегодня", "reward": 20, "kind": "messages_sent", "target": 5},
     {"id": "msg_8", "title": "Хороший темп", "description": "Отправь 8 сообщений сегодня", "reward": 20, "kind": "messages_sent", "target": 8},
-    {"id": "msg_12", "title": "Активный чат", "description": "Отправь 12 сообщений сегодня", "reward": 20, "kind": "messages_sent", "target": 12},
-    {"id": "msg_15", "title": "Марафон", "description": "Отправь 15 сообщений сегодня", "reward": 25, "kind": "messages_sent", "target": 15},
-    {"id": "search_1", "title": "Первый поиск", "description": "Пусть бот 1 раз поищет ответ в интернете", "reward": 15, "kind": "searches_used", "target": 1},
-    {"id": "search_2", "title": "Два поиска", "description": "Используй поиск в интернете 2 раза за день", "reward": 20, "kind": "searches_used", "target": 2},
-    {"id": "search_3", "title": "Исследователь", "description": "Используй поиск в интернете 3 раза за день", "reward": 25, "kind": "searches_used", "target": 3},
-    {"id": "greet_1", "title": "Поздоровайся", "description": "Начни день с приветствия", "reward": 15, "kind": "greetings", "target": 1},
-    {"id": "intro_1", "title": "Знакомство", "description": "Представься боту сегодня", "reward": 20, "kind": "introductions", "target": 1},
-    {"id": "joke_1", "title": "Улыбнись", "description": "Попроси анекдот или шутку", "reward": 15, "kind": "joke_requests", "target": 1},
-    {"id": "math_1", "title": "Считаем", "description": "Задай один вопрос по математике", "reward": 15, "kind": "math_questions", "target": 1},
-    {"id": "code_1", "title": "Кодинг", "description": "Спроси что-нибудь про код или программирование", "reward": 20, "kind": "code_questions", "target": 1},
-    {"id": "fact_1", "title": "Любопытство", "description": "Задай познавательный вопрос", "reward": 15, "kind": "knowledge_questions", "target": 1},
-    {"id": "long_1", "title": "Развернутый запрос", "description": "Отправь одно длинное сообщение", "reward": 15, "kind": "long_messages", "target": 1},
-    {"id": "two_long", "title": "Подробности", "description": "Отправь 2 длинных сообщения за день", "reward": 20, "kind": "long_messages", "target": 2},
-    {"id": "creative_1", "title": "Творческий режим", "description": "Попроси историю, идею или что-то придумать", "reward": 20, "kind": "creative_requests", "target": 1},
-    {"id": "mood_1", "title": "Поделись настроением", "description": "Расскажи, как у тебя дела", "reward": 15, "kind": "mood_updates", "target": 1},
-    {"id": "thanks_1", "title": "Вежливость", "description": "Скажи спасибо боту", "reward": 15, "kind": "thanks_sent", "target": 1},
+    {"id": "msg_12", "title": "Активный чат", "description": "Отправь 12 сообщений сегодня", "reward": 25, "kind": "messages_sent", "target": 12},
+    {"id": "msg_15", "title": "Марафон", "description": "Отправь 15 сообщений сегодня", "reward": 30, "kind": "messages_sent", "target": 15},
+    {"id": "search_1", "title": "Первый поиск", "description": "Пусть бот 1 раз поищет ответ в интернете", "reward": 20, "kind": "searches_used", "target": 1},
+    {"id": "search_2", "title": "Два поиска", "description": "Используй поиск в интернете 2 раза за день", "reward": 25, "kind": "searches_used", "target": 2},
+    {"id": "search_3", "title": "Исследователь", "description": "Используй поиск в интернете 3 раза за день", "reward": 30, "kind": "searches_used", "target": 3},
+    {"id": "greet_1", "title": "Поздоровайся", "description": "Начни день с приветствия", "reward": 20, "kind": "greetings", "target": 1},
+    {"id": "intro_1", "title": "Знакомство", "description": "Представься боту сегодня", "reward": 25, "kind": "introductions", "target": 1},
+    {"id": "joke_1", "title": "Улыбнись", "description": "Попроси анекдот или шутку", "reward": 20, "kind": "joke_requests", "target": 1},
+    {"id": "math_1", "title": "Считаем", "description": "Задай один вопрос по математике", "reward": 20, "kind": "math_questions", "target": 1},
+    {"id": "code_1", "title": "Кодинг", "description": "Спроси что-нибудь про код или программирование", "reward": 25, "kind": "code_questions", "target": 1},
+    {"id": "fact_1", "title": "Любопытство", "description": "Задай познавательный вопрос", "reward": 20, "kind": "knowledge_questions", "target": 1},
+    {"id": "long_1", "title": "Развернутый запрос", "description": "Отправь одно длинное сообщение", "reward": 20, "kind": "long_messages", "target": 1},
+    {"id": "two_long", "title": "Подробности", "description": "Отправь 2 длинных сообщения за день", "reward": 25, "kind": "long_messages", "target": 2},
+    {"id": "creative_1", "title": "Творческий режим", "description": "Попроси историю, идею или что-то придумать", "reward": 25, "kind": "creative_requests", "target": 1},
+    {"id": "mood_1", "title": "Поделись настроением", "description": "Расскажи, как у тебя дела", "reward": 20, "kind": "mood_updates", "target": 1},
+    {"id": "thanks_1", "title": "Вежливость", "description": "Скажи спасибо боту", "reward": 20, "kind": "thanks_sent", "target": 1},
     {"id": "msg_20", "title": "Серия", "description": "Отправь 20 сообщений сегодня", "reward": 30, "kind": "messages_sent", "target": 20},
-    {"id": "search_4", "title": "Глубокий поиск", "description": "Используй поиск в интернете 4 раза за день", "reward": 30, "kind": "searches_used", "target": 4},
-    {"id": "joke_2", "title": "Ещё шутка", "description": "Попроси 2 шутки или анекдота за день", "reward": 20, "kind": "joke_requests", "target": 2},
-    {"id": "code_2", "title": "Технический разговор", "description": "Задай 2 вопроса про код", "reward": 25, "kind": "code_questions", "target": 2},
-    {"id": "fact_2", "title": "Хочу знать больше", "description": "Задай 2 познавательных вопроса", "reward": 20, "kind": "knowledge_questions", "target": 2},
-    {"id": "creative_2", "title": "Воображение", "description": "Попроси 2 творческих ответа за день", "reward": 25, "kind": "creative_requests", "target": 2},
-    {"id": "thanks_2", "title": "Хороший тон", "description": "Скажи спасибо 2 раза за день", "reward": 20, "kind": "thanks_sent", "target": 2},
-    {"id": "mood_2", "title": "Открытый диалог", "description": "2 раза поделись своим состоянием за день", "reward": 20, "kind": "mood_updates", "target": 2},
+    {"id": "search_4", "title": "Глубокий поиск", "description": "Используй поиск в интернете 4 раза за день", "reward": 35, "kind": "searches_used", "target": 4},
+    {"id": "joke_2", "title": "Ещё шутка", "description": "Попроси 2 шутки или анекдота за день", "reward": 25, "kind": "joke_requests", "target": 2},
+    {"id": "code_2", "title": "Технический разговор", "description": "Задай 2 вопроса про код", "reward": 30, "kind": "code_questions", "target": 2},
+    {"id": "fact_2", "title": "Хочу знать больше", "description": "Задай 2 познавательных вопроса", "reward": 25, "kind": "knowledge_questions", "target": 2},
+    {"id": "creative_2", "title": "Воображение", "description": "Попроси 2 творческих ответа за день", "reward": 30, "kind": "creative_requests", "target": 2},
+    {"id": "thanks_2", "title": "Хороший тон", "description": "Скажи спасибо 2 раза за день", "reward": 25, "kind": "thanks_sent", "target": 2},
+    {"id": "mood_2", "title": "Открытый диалог", "description": "2 раза поделись своим состоянием за день", "reward": 25, "kind": "mood_updates", "target": 2},
 ]
 
 
