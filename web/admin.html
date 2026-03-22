@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>fluxa-ai admin</title>
+    <link rel="stylesheet" href="/admin.css" />
+  </head>
+  <body>
+    <div class="admin-shell">
+      <aside class="admin-sidebar">
+        <div class="admin-brand">
+          <p class="kicker">fluxa-ai</p>
+          <h1>Admin</h1>
+          <p class="muted">Пользователи, кредиты, блокировки</p>
+        </div>
+
+        <div class="admin-card">
+          <div id="admin-status" class="muted">Нет входа</div>
+          <button id="refresh-users" class="admin-button hidden">Обновить</button>
+          <button id="admin-logout" class="admin-button ghost hidden">Выйти</button>
+        </div>
+      </aside>
+
+      <main class="admin-main">
+        <section id="admin-login-view" class="panel">
+          <p class="kicker">Admin Access</p>
+          <h2>Вход в админ-панель</h2>
+          <form id="admin-login-form" class="admin-form">
+            <label>
+              <span>Логин</span>
+              <input id="admin-username" type="text" autocomplete="username" />
+            </label>
+            <label>
+              <span>Пароль</span>
+              <input id="admin-password" type="password" autocomplete="current-password" />
+            </label>
+            <button class="admin-button" type="submit">Войти</button>
+          </form>
+          <p id="admin-login-error" class="error-text"></p>
+        </section>
+
+        <section id="admin-dashboard" class="hidden">
+          <div class="panel panel-row">
+            <div>
+              <p class="kicker">Users</p>
+              <h2>Пользователи</h2>
+            </div>
+            <input id="user-search" class="search-input" type="text" placeholder="Поиск по логину" />
+          </div>
+
+          <section id="users-list" class="users-grid"></section>
+        </section>
+      </main>
+    </div>
+
+    <script src="/admin.js"></script>
+  </body>
+</html>

@@ -37,6 +37,7 @@ PROFILE_FILE = MODEL_DIR / "user_profile.json"
 USERS_FILE = MODEL_DIR / "users.json"
 CHATS_FILE = MODEL_DIR / "chats.json"
 SESSIONS_FILE = MODEL_DIR / "sessions.json"
+ADMIN_SESSIONS_FILE = MODEL_DIR / "admin_sessions.json"
 PROMOS_FILE = MODEL_DIR / "promos.json"
 WORDS_DB_FILE = Path("data/ru_RU.dic")
 SLANG_ALIASES_FILE = Path("data/ru_slang_aliases.json")
@@ -860,6 +861,14 @@ def storage_mode() -> str:
     return "postgres" if database_enabled() and not DATABASE_RUNTIME_ERROR else "local"
 
 
+def admin_username() -> str:
+    return os.getenv("ADMIN_USERNAME", "admin").strip() or "admin"
+
+
+def admin_password() -> str:
+    return os.getenv("ADMIN_PASSWORD", "").strip()
+
+
 def init_database() -> None:
     if not database_enabled():
         return
@@ -958,6 +967,14 @@ def save_sessions(sessions: dict, path: Path = SESSIONS_FILE) -> None:
     save_state("sessions", sessions, path)
 
 
+def load_admin_sessions(path: Path = ADMIN_SESSIONS_FILE) -> dict:
+    return load_state("admin_sessions", path)
+
+
+def save_admin_sessions(sessions: dict, path: Path = ADMIN_SESSIONS_FILE) -> None:
+    save_state("admin_sessions", sessions, path)
+
+
 def load_promos(path: Path = PROMOS_FILE) -> dict:
     promos = load_state("promos", path)
     for code, meta in PROMO_DEFINITIONS.items():
@@ -988,6 +1005,7 @@ def ensure_user_record(username: str, users: dict) -> dict:
             "last_daily_bonus_day": "",
             "credit_history": [],
             "redeemed_promos": [],
+            "banned": False,
             "claimed_tasks": [],
             "completed_tasks": [],
         },
@@ -1004,6 +1022,7 @@ def ensure_user_record(username: str, users: dict) -> dict:
     user.setdefault("last_daily_bonus_day", "")
     user.setdefault("credit_history", [])
     user.setdefault("redeemed_promos", [])
+    user.setdefault("banned", False)
     user.setdefault("claimed_tasks", [])
     user.setdefault("completed_tasks", [])
     ensure_daily_tasks(user)
@@ -1817,6 +1836,12 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
         def _save_sessions(self, sessions: dict) -> None:
             save_sessions(sessions)
 
+        def _load_admin_sessions(self) -> dict:
+            return load_admin_sessions()
+
+        def _save_admin_sessions(self, sessions: dict) -> None:
+            save_admin_sessions(sessions)
+
         def _load_promos(self) -> dict:
             return load_promos()
 
@@ -1862,6 +1887,28 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
             morsel = cookie.get("fluxa_ai_session")
             return morsel.value if morsel else None
 
+        def _admin_cookie_token(self) -> str | None:
+            header = self.headers.get("Cookie")
+            if not header:
+                return None
+            cookie = SimpleCookie()
+            cookie.load(header)
+            morsel = cookie.get("fluxa_ai_admin_session")
+            return morsel.value if morsel else None
+
+        def _is_admin(self) -> bool:
+            token = self._admin_cookie_token()
+            if not token:
+                return False
+            sessions = self._load_admin_sessions()
+            return sessions.get(token) == admin_username()
+
+        def _require_admin(self) -> bool:
+            if self._is_admin():
+                return True
+            self._send_json({"error": "Нужен вход в админ-панель."}, status=401)
+            return False
+
         def _current_user(self) -> dict | None:
             token = self._cookie_token()
             if not token:
@@ -1875,6 +1922,8 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
             if not user:
                 return None
             ensure_user_record(username, users)
+            if user.get("banned"):
+                return None
             daily_bonus_awarded = apply_daily_login_bonus(user)
             if daily_bonus_awarded:
                 self._save_users(users)
@@ -1884,10 +1933,16 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
         def do_GET(self) -> None:
             if self.path in {"/", "/index.html"}:
                 return self._send_file(web_dir / "index.html", "text/html; charset=utf-8")
+            if self.path == "/admin":
+                return self._send_file(web_dir / "admin.html", "text/html; charset=utf-8")
             if self.path == "/app.js":
                 return self._send_file(web_dir / "app.js", "application/javascript; charset=utf-8")
+            if self.path == "/admin.js":
+                return self._send_file(web_dir / "admin.js", "application/javascript; charset=utf-8")
             if self.path == "/styles.css":
                 return self._send_file(web_dir / "styles.css", "text/css; charset=utf-8")
+            if self.path == "/admin.css":
+                return self._send_file(web_dir / "admin.css", "text/css; charset=utf-8")
             if self.path == "/api/health":
                 return self._send_json({"ok": True, "storage": storage_mode(), "database_error": DATABASE_RUNTIME_ERROR})
             if self.path == "/api/me":
@@ -1895,6 +1950,29 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 chats = self._load_chats()
                 history = chats.get(user["username"], []) if user else []
                 return self._send_json({"user": user, "history": history, "storage": storage_mode()})
+            if self.path == "/api/admin/me":
+                return self._send_json({"ok": self._is_admin(), "admin": admin_username() if self._is_admin() else None})
+            if self.path == "/api/admin/users":
+                if not self._require_admin():
+                    return
+                users = self._load_users()
+                chats = self._load_chats()
+                payload = []
+                for username, user in sorted(users.items()):
+                    ensure_user_record(username, users)
+                    payload.append(
+                        {
+                            "username": username,
+                            "credits": user.get("credits", DEFAULT_CREDITS),
+                            "referrals": user.get("referrals", 0),
+                            "banned": user.get("banned", False),
+                            "messages_sent": user.get("stats", {}).get("messages_sent", 0),
+                            "searches_used": user.get("stats", {}).get("searches_used", 0),
+                            "chat_messages": len(chats.get(username, [])),
+                            "credit_history": user.get("credit_history", [])[:8],
+                        }
+                    )
+                return self._send_json({"users": payload})
             self.send_error(HTTPStatus.NOT_FOUND)
 
         def do_POST(self) -> None:
@@ -1926,6 +2004,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     "last_daily_bonus_day": "",
                     "credit_history": [],
                     "redeemed_promos": [],
+                    "banned": False,
                     "claimed_tasks": [],
                     "completed_tasks": [],
                 }
@@ -1964,6 +2043,8 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 user = users.get(username)
                 if not user or not verify_password(password, user["salt"], user["password_hash"]):
                     return self._send_json({"error": "Неверный логин или пароль."}, status=401)
+                if user.get("banned"):
+                    return self._send_json({"error": "Аккаунт заблокирован администратором."}, status=403)
                 ensure_user_record(username, users)
                 daily_bonus_awarded = apply_daily_login_bonus(user)
                 self._save_users(users)
@@ -1987,6 +2068,71 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     {"ok": True},
                     headers={"Set-Cookie": "fluxa_ai_session=; Max-Age=0; Path=/; SameSite=Lax"},
                 )
+
+            if self.path == "/api/admin/login":
+                payload = self._read_json()
+                if payload is None:
+                    return self._send_json({"error": "Invalid JSON"}, status=400)
+                username = str(payload.get("username", "")).strip()
+                password = str(payload.get("password", "")).strip()
+                if username != admin_username() or not admin_password() or password != admin_password():
+                    return self._send_json({"error": "Неверный админ-логин или пароль."}, status=401)
+                sessions = self._load_admin_sessions()
+                token = secrets.token_hex(24)
+                sessions[token] = username
+                self._save_admin_sessions(sessions)
+                return self._send_json(
+                    {"ok": True, "admin": username},
+                    headers={"Set-Cookie": f"fluxa_ai_admin_session={token}; HttpOnly; Path=/; SameSite=Lax"},
+                )
+
+            if self.path == "/api/admin/logout":
+                token = self._admin_cookie_token()
+                sessions = self._load_admin_sessions()
+                if token and token in sessions:
+                    sessions.pop(token, None)
+                    self._save_admin_sessions(sessions)
+                return self._send_json(
+                    {"ok": True},
+                    headers={"Set-Cookie": "fluxa_ai_admin_session=; Max-Age=0; Path=/; SameSite=Lax"},
+                )
+
+            if self.path == "/api/admin/grant-credits":
+                if not self._require_admin():
+                    return
+                payload = self._read_json()
+                if payload is None:
+                    return self._send_json({"error": "Invalid JSON"}, status=400)
+                username = str(payload.get("username", "")).strip()
+                amount = int(payload.get("amount", 0))
+                if not username or amount == 0:
+                    return self._send_json({"error": "Нужны логин и число кредитов."}, status=400)
+                users = self._load_users()
+                user = users.get(username)
+                if not user:
+                    return self._send_json({"error": "Пользователь не найден."}, status=404)
+                ensure_user_record(username, users)
+                user["credits"] = user.get("credits", DEFAULT_CREDITS) + amount
+                action = "Начисление" if amount > 0 else "Списание"
+                record_credit_event(user, amount, action, "Из админ-панели")
+                self._save_users(users)
+                return self._send_json({"ok": True})
+
+            if self.path == "/api/admin/toggle-ban":
+                if not self._require_admin():
+                    return
+                payload = self._read_json()
+                if payload is None:
+                    return self._send_json({"error": "Invalid JSON"}, status=400)
+                username = str(payload.get("username", "")).strip()
+                users = self._load_users()
+                user = users.get(username)
+                if not user:
+                    return self._send_json({"error": "Пользователь не найден."}, status=404)
+                ensure_user_record(username, users)
+                user["banned"] = not user.get("banned", False)
+                self._save_users(users)
+                return self._send_json({"ok": True, "banned": user["banned"]})
 
             if self.path == "/api/tasks/claim":
                 current = self._current_user()
