@@ -2,8 +2,8 @@ const loginView = document.getElementById("admin-login-view");
 const dashboard = document.getElementById("admin-dashboard");
 const loginForm = document.getElementById("admin-login-form");
 const loginError = document.getElementById("admin-login-error");
-const usernameInput = document.getElementById("admin-username");
-const passwordInput = document.getElementById("admin-password");
+const apiUrlInput = document.getElementById("admin-api-url");
+const apiKeyInput = document.getElementById("admin-api-key");
 const usersList = document.getElementById("users-list");
 const adminStatus = document.getElementById("admin-status");
 const refreshUsersButton = document.getElementById("refresh-users");
@@ -11,11 +11,25 @@ const adminLogoutButton = document.getElementById("admin-logout");
 const userSearch = document.getElementById("user-search");
 
 let allUsers = [];
+let apiBaseUrl = localStorage.getItem("fluxa_admin_api_url") || "";
+let adminApiKey = localStorage.getItem("fluxa_admin_api_key") || "";
+
+apiUrlInput.value = apiBaseUrl;
+apiKeyInput.value = adminApiKey;
+
+function normalizeBaseUrl(url) {
+  return url.trim().replace(/\/+$/, "");
+}
 
 async function request(path, payload = null) {
+  if (!apiBaseUrl || !adminApiKey) {
+    throw new Error("Сначала укажи API URL и API key.");
+  }
+
   const options = {
-    credentials: "same-origin",
-    headers: {},
+    headers: {
+      "X-Admin-Key": adminApiKey,
+    },
   };
 
   if (payload !== null) {
@@ -24,7 +38,7 @@ async function request(path, payload = null) {
     options.body = JSON.stringify(payload);
   }
 
-  const response = await fetch(path, options);
+  const response = await fetch(`${apiBaseUrl}${path}`, options);
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.error || "Ошибка");
@@ -32,13 +46,12 @@ async function request(path, payload = null) {
   return data;
 }
 
-function setAdminState(adminName) {
-  const loggedIn = Boolean(adminName);
-  loginView.classList.toggle("hidden", loggedIn);
-  dashboard.classList.toggle("hidden", !loggedIn);
-  refreshUsersButton.classList.toggle("hidden", !loggedIn);
-  adminLogoutButton.classList.toggle("hidden", !loggedIn);
-  adminStatus.textContent = loggedIn ? `Админ: ${adminName}` : "Нет входа";
+function setAdminState(connected) {
+  loginView.classList.toggle("hidden", connected);
+  dashboard.classList.toggle("hidden", !connected);
+  refreshUsersButton.classList.toggle("hidden", !connected);
+  adminLogoutButton.classList.toggle("hidden", !connected);
+  adminStatus.textContent = connected ? `Подключено к: ${apiBaseUrl}` : "Нет подключения";
 }
 
 function renderUsers(users) {
@@ -114,27 +127,37 @@ async function loadUsers() {
 }
 
 async function boot() {
+  if (!apiBaseUrl || !adminApiKey) {
+    setAdminState(false);
+    return;
+  }
   try {
-    const data = await request("/api/admin/me");
-    if (data.ok) {
-      setAdminState(data.admin);
-      await loadUsers();
-      return;
-    }
-  } catch {}
-  setAdminState(null);
+    await request("/api/admin/me");
+    setAdminState(true);
+    await loadUsers();
+  } catch (error) {
+    setAdminState(false);
+    loginError.textContent = error.message;
+  }
 }
 
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   loginError.textContent = "";
+  apiBaseUrl = normalizeBaseUrl(apiUrlInput.value);
+  adminApiKey = apiKeyInput.value.trim();
+
+  if (!apiBaseUrl || !adminApiKey) {
+    loginError.textContent = "Нужны API URL и API key.";
+    return;
+  }
+
+  localStorage.setItem("fluxa_admin_api_url", apiBaseUrl);
+  localStorage.setItem("fluxa_admin_api_key", adminApiKey);
+
   try {
-    const data = await request("/api/admin/login", {
-      username: usernameInput.value.trim(),
-      password: passwordInput.value,
-    });
-    setAdminState(data.admin);
-    passwordInput.value = "";
+    await request("/api/admin/me");
+    setAdminState(true);
     await loadUsers();
   } catch (error) {
     loginError.textContent = error.message;
@@ -142,10 +165,16 @@ loginForm.addEventListener("submit", async (event) => {
 });
 
 refreshUsersButton.addEventListener("click", loadUsers);
-adminLogoutButton.addEventListener("click", async () => {
-  await request("/api/admin/logout", {});
-  setAdminState(null);
+adminLogoutButton.addEventListener("click", () => {
+  localStorage.removeItem("fluxa_admin_api_url");
+  localStorage.removeItem("fluxa_admin_api_key");
+  apiBaseUrl = "";
+  adminApiKey = "";
+  allUsers = [];
+  apiUrlInput.value = "";
+  apiKeyInput.value = "";
   usersList.innerHTML = "";
+  setAdminState(false);
 });
 userSearch.addEventListener("input", () => renderUsers(allUsers));
 

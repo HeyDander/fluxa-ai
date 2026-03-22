@@ -869,6 +869,10 @@ def admin_password() -> str:
     return os.getenv("ADMIN_PASSWORD", "").strip()
 
 
+def admin_api_key() -> str:
+    return os.getenv("ADMIN_API_KEY", "").strip()
+
+
 def init_database() -> None:
     if not database_enabled():
         return
@@ -1818,6 +1822,21 @@ def run_chat(bot: SmartChatBot) -> None:
 
 def make_handler(bot: SmartChatBot, web_dir: Path):
     class ChatHandler(BaseHTTPRequestHandler):
+        def _is_admin_api_path(self) -> bool:
+            return self.path.startswith("/api/admin/")
+
+        def _cors_headers(self) -> dict[str, str]:
+            if not self._is_admin_api_path():
+                return {}
+            origin = self.headers.get("Origin", "*")
+            return {
+                "Access-Control-Allow-Origin": origin if origin else "*",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, X-Admin-Key",
+                "Access-Control-Allow-Credentials": "true",
+                "Vary": "Origin",
+            }
+
         def _load_users(self) -> dict:
             return load_users()
 
@@ -1853,6 +1872,8 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
+            for key, value in self._cors_headers().items():
+                self.send_header(key, value)
             if headers:
                 for key, value in headers.items():
                     self.send_header(key, value)
@@ -1897,6 +1918,10 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
             return morsel.value if morsel else None
 
         def _is_admin(self) -> bool:
+            request_key = self.headers.get("X-Admin-Key", "").strip()
+            configured_key = admin_api_key()
+            if configured_key and secrets.compare_digest(request_key, configured_key):
+                return True
             token = self._admin_cookie_token()
             if not token:
                 return False
@@ -1908,6 +1933,12 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 return True
             self._send_json({"error": "Нужен вход в админ-панель."}, status=401)
             return False
+
+        def do_OPTIONS(self) -> None:
+            self.send_response(HTTPStatus.NO_CONTENT)
+            for key, value in self._cors_headers().items():
+                self.send_header(key, value)
+            self.end_headers()
 
         def _current_user(self) -> dict | None:
             token = self._cookie_token()

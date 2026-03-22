@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>fluxa-ai admin</title>
-    <link rel="stylesheet" href="/admin.css" />
+    <link rel="stylesheet" href="./admin.css" />
   </head>
   <body>
     <div class="admin-shell">
@@ -25,17 +25,17 @@
       <main class="admin-main">
         <section id="admin-login-view" class="panel">
           <p class="kicker">Admin Access</p>
-          <h2>Вход в админ-панель</h2>
+          <h2>Подключение к сайту</h2>
           <form id="admin-login-form" class="admin-form">
             <label>
-              <span>Логин</span>
-              <input id="admin-username" type="text" autocomplete="username" />
+              <span>API URL</span>
+              <input id="admin-api-url" type="text" placeholder="https://твойдомен.up.railway.app" />
             </label>
             <label>
-              <span>Пароль</span>
-              <input id="admin-password" type="password" autocomplete="current-password" />
+              <span>API key</span>
+              <input id="admin-api-key" type="password" placeholder="ADMIN_API_KEY" />
             </label>
-            <button class="admin-button" type="submit">Войти</button>
+            <button class="admin-button" type="submit">Подключить</button>
           </form>
           <p id="admin-login-error" class="error-text"></p>
         </section>
@@ -54,6 +54,6 @@
       </main>
     </div>
 
-    <script src="/admin.js"></script>
+    <script src="./admin.js"></script>
   </body>
 </html>
