@@ -39,6 +39,7 @@ CHATS_FILE = MODEL_DIR / "chats.json"
 SESSIONS_FILE = MODEL_DIR / "sessions.json"
 ADMIN_SESSIONS_FILE = MODEL_DIR / "admin_sessions.json"
 PROMOS_FILE = MODEL_DIR / "promos.json"
+GLOBAL_CHAT_KEY = "__global__"
 WORDS_DB_FILE = Path("data/ru_RU.dic")
 SLANG_ALIASES_FILE = Path("data/ru_slang_aliases.json")
 SLANG_PHRASES_FILE = Path("data/ru_slang_phrases.json")
@@ -2001,8 +2002,28 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 chats = self._load_chats()
                 history = chats.get(user["username"], []) if user else []
                 return self._send_json({"user": user, "history": history, "storage": storage_mode()})
+            if self.path == "/api/global-chat":
+                user = self._current_user()
+                chats = self._load_chats()
+                history = chats.get(GLOBAL_CHAT_KEY, []) if user else []
+                return self._send_json({"user": user, "history": history, "storage": storage_mode()})
             if self.path == "/api/admin/me":
                 return self._send_json({"ok": self._is_admin(), "admin": admin_username() if self._is_admin() else None})
+            if self.path == "/api/admin/global-chat":
+                if not self._require_admin():
+                    return
+                chats = self._load_chats()
+                history = chats.get(GLOBAL_CHAT_KEY, [])
+                payload = [
+                    {
+                        "chat_index": index,
+                        "role": item.get("role", "bot"),
+                        "text": item.get("text", ""),
+                        "author": item.get("author", ""),
+                    }
+                    for index, item in enumerate(history)
+                ]
+                return self._send_json({"history": payload})
             if self.path == "/api/admin/users":
                 if not self._require_admin():
                     return
@@ -2265,6 +2286,23 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 self._save_chats(chats)
                 return self._send_json({"ok": True})
 
+            if self.path == "/api/admin/global-chat/send-message":
+                if not self._require_admin():
+                    return
+                payload = self._read_json()
+                if payload is None:
+                    return self._send_json({"error": "Invalid JSON"}, status=400)
+                text = str(payload.get("text", "")).strip()
+                if not text:
+                    return self._send_json({"error": "Нужен текст."}, status=400)
+                chats = self._load_chats()
+                chats.setdefault(GLOBAL_CHAT_KEY, []).append(
+                    {"role": "bot", "text": text, "author": "fluxa-ai support"}
+                )
+                chats[GLOBAL_CHAT_KEY] = chats[GLOBAL_CHAT_KEY][-200:]
+                self._save_chats(chats)
+                return self._send_json({"ok": True})
+
             if self.path == "/api/admin/edit-message":
                 if not self._require_admin():
                     return
@@ -2288,6 +2326,25 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 self._save_chats(chats)
                 return self._send_json({"ok": True})
 
+            if self.path == "/api/admin/global-chat/edit-message":
+                if not self._require_admin():
+                    return
+                payload = self._read_json()
+                if payload is None:
+                    return self._send_json({"error": "Invalid JSON"}, status=400)
+                text = str(payload.get("text", "")).strip()
+                chat_index = payload.get("chat_index")
+                if not text or not isinstance(chat_index, int):
+                    return self._send_json({"error": "Нужны индекс и новый текст."}, status=400)
+                chats = self._load_chats()
+                history = chats.get(GLOBAL_CHAT_KEY, [])
+                if chat_index < 0 or chat_index >= len(history):
+                    return self._send_json({"error": "Сообщение не найдено."}, status=404)
+                history[chat_index]["text"] = text
+                chats[GLOBAL_CHAT_KEY] = history
+                self._save_chats(chats)
+                return self._send_json({"ok": True})
+
             if self.path == "/api/admin/delete-message":
                 if not self._require_admin():
                     return
@@ -2307,6 +2364,24 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     return self._send_json({"error": "Сообщение не найдено."}, status=404)
                 user_chat.pop(chat_index)
                 chats[username] = user_chat
+                self._save_chats(chats)
+                return self._send_json({"ok": True})
+
+            if self.path == "/api/admin/global-chat/delete-message":
+                if not self._require_admin():
+                    return
+                payload = self._read_json()
+                if payload is None:
+                    return self._send_json({"error": "Invalid JSON"}, status=400)
+                chat_index = payload.get("chat_index")
+                if not isinstance(chat_index, int):
+                    return self._send_json({"error": "Нужен индекс сообщения."}, status=400)
+                chats = self._load_chats()
+                history = chats.get(GLOBAL_CHAT_KEY, [])
+                if chat_index < 0 or chat_index >= len(history):
+                    return self._send_json({"error": "Сообщение не найдено."}, status=404)
+                history.pop(chat_index)
+                chats[GLOBAL_CHAT_KEY] = history
                 self._save_chats(chats)
                 return self._send_json({"ok": True})
 
@@ -2379,6 +2454,38 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 chats[username] = []
                 self._save_chats(chats)
                 return self._send_json({"ok": True})
+
+            if self.path == "/api/global-chat":
+                current = self._current_user()
+                if not current:
+                    return self._send_json({"error": "Нужен вход в аккаунт."}, status=401)
+
+                payload = self._read_json()
+                if payload is None:
+                    return self._send_json({"error": "Invalid JSON"}, status=400)
+
+                message = str(payload.get("message", "")).strip()
+                if not message:
+                    return self._send_json({"error": "Empty message"}, status=400)
+
+                username = current["username"]
+                users = self._load_users()
+                user = ensure_user_record(username, users)
+                if user.get("credits", DEFAULT_CREDITS) < MESSAGE_COST:
+                    return self._send_json({"error": "Кредиты закончились. Выполни задания или пригласи друга."}, status=402)
+
+                user["credits"] -= MESSAGE_COST
+                record_credit_event(user, -MESSAGE_COST, "Списание", "Сообщение в общем чате")
+                ensure_daily_tasks(user)
+                user["stats"]["messages_sent"] = user["stats"].get("messages_sent", 0) + 1
+                user["daily_stats"]["messages_sent"] = user["daily_stats"].get("messages_sent", 0) + 1
+
+                chats = self._load_chats()
+                chats.setdefault(GLOBAL_CHAT_KEY, []).append({"role": "user", "text": message, "author": username})
+                chats[GLOBAL_CHAT_KEY] = chats[GLOBAL_CHAT_KEY][-200:]
+                self._save_users(users)
+                self._save_chats(chats)
+                return self._send_json({"ok": True, "history": chats[GLOBAL_CHAT_KEY], "user": self._current_user()})
 
             if self.path != "/api/chat":
                 self.send_error(HTTPStatus.NOT_FOUND)

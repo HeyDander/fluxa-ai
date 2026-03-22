@@ -227,6 +227,12 @@ body {
   box-shadow: 0 10px 24px rgba(124, 77, 255, 0.12);
 }
 
+.action-button.active-toggle {
+  color: white;
+  background: linear-gradient(135deg, var(--accent), #9e7dff);
+  border-color: transparent;
+}
+
 .action-button.danger {
   color: #c53f7a;
   border-color: rgba(197, 63, 122, 0.24);

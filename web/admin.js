@@ -14,6 +14,7 @@ const selectedUserPanel = document.getElementById("selected-user-panel");
 const selectedUsername = document.getElementById("selected-username");
 const selectedUserMeta = document.getElementById("selected-user-meta");
 const selectedChat = document.getElementById("selected-chat");
+const globalChatAdminButton = document.getElementById("global-chat-admin-button");
 const operatorForm = document.getElementById("operator-form");
 const operatorMessage = document.getElementById("operator-message");
 const operatorError = document.getElementById("operator-error");
@@ -24,6 +25,7 @@ let allUsers = [];
 let apiBaseUrl = localStorage.getItem("fluxa_admin_api_url") || "";
 let adminApiKey = localStorage.getItem("fluxa_admin_api_key") || "";
 let activeUsername = "";
+let activePanelMode = "user";
 let liveUsersTimer = null;
 let usersRequestInFlight = false;
 let grantAmountDraft = localStorage.getItem("fluxa_admin_grant_amount") || "400";
@@ -256,6 +258,7 @@ function renderUsers(users) {
 function selectUser(username) {
   const user = allUsers.find((item) => item.username === username);
   if (!user) return;
+  activePanelMode = "user";
   activeUsername = username;
   selectedUserPanel.classList.remove("hidden");
   selectedUsername.textContent = user.username;
@@ -331,7 +334,83 @@ function selectUser(username) {
   }
 }
 
+async function openGlobalChatPanel() {
+  activePanelMode = "global";
+  activeUsername = "";
+  selectedUserPanel.classList.remove("hidden");
+  selectedUsername.textContent = "Общий чат";
+  selectedUserMeta.textContent = "Все пользователи · режим модерации";
+  selectedChat.innerHTML = "";
+  funActionsError.textContent = "";
+  operatorError.textContent = "";
+  const data = await request("/api/admin/global-chat");
+  const history = data.history || [];
+  if (!history.length) {
+    selectedChat.innerHTML = `<div class="muted">Общий чат пока пустой</div>`;
+    return;
+  }
+
+  for (const item of history) {
+    const line = document.createElement("div");
+    line.className = `chat-line ${item.role}`;
+
+    const text = document.createElement("div");
+    text.className = "chat-line-text";
+    const author = item.author ? `${item.author}: ` : "";
+    text.textContent = `${author}${item.text}`;
+
+    const actions = document.createElement("div");
+    actions.className = "chat-line-actions";
+
+    const editButton = document.createElement("button");
+    editButton.type = "button";
+    editButton.className = "chat-action-button";
+    editButton.textContent = "Изменить";
+    editButton.addEventListener("click", async () => {
+      const nextText = window.prompt("Новый текст сообщения", item.text);
+      if (nextText === null) return;
+      const trimmed = nextText.trim();
+      if (!trimmed) return;
+      try {
+        await request("/api/admin/global-chat/edit-message", {
+          chat_index: item.chat_index,
+          text: trimmed,
+        });
+        await openGlobalChatPanel();
+      } catch (error) {
+        operatorError.textContent = error.message;
+      }
+    });
+
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "chat-action-button ghost";
+    deleteButton.textContent = "Удалить";
+    deleteButton.addEventListener("click", async () => {
+      if (!window.confirm("Удалить это сообщение из общего чата?")) {
+        return;
+      }
+      try {
+        await request("/api/admin/global-chat/delete-message", {
+          chat_index: item.chat_index,
+        });
+        await openGlobalChatPanel();
+      } catch (error) {
+        operatorError.textContent = error.message;
+      }
+    });
+
+    actions.append(editButton, deleteButton);
+    line.append(text, actions);
+    selectedChat.appendChild(line);
+  }
+}
+
 async function sendSupportMessage(text) {
+  if (activePanelMode === "global") {
+    await request("/api/admin/global-chat/send-message", { text });
+    return;
+  }
   await request("/api/admin/send-message", {
     username: activeUsername,
     text,
@@ -340,19 +419,27 @@ async function sendSupportMessage(text) {
 
 async function runFunAction(action) {
   funActionsError.textContent = "";
-  if (!activeUsername) {
+  if (!activeUsername && activePanelMode !== "global") {
     funActionsError.textContent = "Сначала выбери пользователя.";
     return;
   }
   try {
     if (action.credits) {
+      if (activePanelMode === "global") {
+        funActionsError.textContent = "Бонусы доступны только для конкретного пользователя.";
+        return;
+      }
       await request("/api/admin/grant-credits", {
         username: activeUsername,
         amount: action.credits,
       });
     }
     await sendSupportMessage(action.text);
-    await loadUsers();
+    if (activePanelMode === "global") {
+      await openGlobalChatPanel();
+    } else {
+      await loadUsers();
+    }
   } catch (error) {
     funActionsError.textContent = error.message;
   }
@@ -380,7 +467,9 @@ async function loadUsers(silent = false) {
     const data = await request("/api/admin/users");
     allUsers = data.users || [];
     renderUsers(allUsers);
-    if (activeUsername) {
+    if (activePanelMode === "global") {
+      await openGlobalChatPanel();
+    } else if (activeUsername) {
       selectUser(activeUsername);
     }
   } catch (error) {
@@ -434,6 +523,9 @@ loginForm.addEventListener("submit", async (event) => {
 });
 
 refreshUsersButton.addEventListener("click", loadUsers);
+globalChatAdminButton.addEventListener("click", () => {
+  void openGlobalChatPanel();
+});
 adminLogoutButton.addEventListener("click", () => {
   stopLiveUsersSync();
   localStorage.removeItem("fluxa_admin_api_url");
@@ -447,6 +539,7 @@ adminLogoutButton.addEventListener("click", () => {
   selectedUserPanel.classList.add("hidden");
   selectedChat.innerHTML = "";
   activeUsername = "";
+  activePanelMode = "user";
   setAdminState(false);
 });
 userSearch.addEventListener("input", () => renderUsers(allUsers));
@@ -454,7 +547,7 @@ userSearch.addEventListener("input", () => renderUsers(allUsers));
 operatorForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   operatorError.textContent = "";
-  if (!activeUsername) {
+  if (!activeUsername && activePanelMode !== "global") {
     operatorError.textContent = "Сначала выбери пользователя.";
     return;
   }
@@ -466,7 +559,11 @@ operatorForm.addEventListener("submit", async (event) => {
   try {
     await sendSupportMessage(text);
     operatorMessage.value = "";
-    await loadUsers();
+    if (activePanelMode === "global") {
+      await openGlobalChatPanel();
+    } else {
+      await loadUsers();
+    }
   } catch (error) {
     operatorError.textContent = error.message;
   }

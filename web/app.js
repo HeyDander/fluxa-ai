@@ -3,11 +3,13 @@ const form = document.getElementById("chat-form");
 const input = document.getElementById("chat-input");
 const sendButton = document.getElementById("send-button");
 const newChatButton = document.getElementById("new-chat");
+const globalChatButton = document.getElementById("global-chat-button");
 const tasksButton = document.getElementById("tasks-button");
 const promoButton = document.getElementById("promo-button");
 const deleteChatButton = document.getElementById("delete-chat");
 const logoutButton = document.getElementById("logout-button");
 const accountName = document.getElementById("account-name");
+const chatTitle = document.getElementById("chat-title");
 
 const authOverlay = document.getElementById("auth-overlay");
 const authForm = document.getElementById("auth-form");
@@ -41,6 +43,7 @@ let syncInFlight = false;
 let lastHistorySnapshot = "";
 let lastUserSnapshot = "";
 let awaitingChatReply = false;
+let activeChatMode = "private";
 
 function setComposerEnabled(enabled) {
   input.disabled = !enabled;
@@ -49,10 +52,10 @@ function setComposerEnabled(enabled) {
 
 function clearMessages() {
   messages.innerHTML = "";
-  appendMessage("bot", "Новый чат начат. Напиши сообщение.");
+  appendMessage("bot", activeChatMode === "global" ? "Открыт общий чат. Напиши сообщение для всех." : "Новый чат начат. Напиши сообщение.");
 }
 
-function appendMessage(role, text) {
+function appendMessage(role, text, author = "") {
   const article = document.createElement("article");
   article.className = `message ${role}`;
 
@@ -62,7 +65,7 @@ function appendMessage(role, text) {
 
   const bubble = document.createElement("div");
   bubble.className = "bubble";
-  bubble.textContent = text;
+  bubble.textContent = author ? `${author}: ${text}` : text;
 
   article.appendChild(avatar);
   article.appendChild(bubble);
@@ -167,6 +170,14 @@ function applyUser(user) {
   }
 }
 
+function setChatMode(mode) {
+  activeChatMode = mode;
+  globalChatButton.classList.toggle("active-toggle", mode === "global");
+  newChatButton.classList.toggle("active-toggle", mode === "private");
+  deleteChatButton.classList.toggle("hidden", mode === "global");
+  chatTitle.textContent = mode === "global" ? "Общий чат" : "Болталка как приложение";
+}
+
 function renderCreditHistory(items) {
   creditHistory.innerHTML = "";
   if (!items || items.length === 0) {
@@ -248,11 +259,11 @@ function renderTasks(tasks) {
 function renderHistory(history) {
   messages.innerHTML = "";
   if (!history || history.length === 0) {
-    appendMessage("bot", "Привет. Напиши сообщение, и я отвечу.");
+    appendMessage("bot", activeChatMode === "global" ? "Общий чат пока пустой. Напиши первое сообщение." : "Привет. Напиши сообщение, и я отвечу.");
     return;
   }
   for (const item of history) {
-    appendMessage(item.role, item.text);
+    appendMessage(item.role, item.text, item.author || "");
   }
 }
 
@@ -286,7 +297,7 @@ async function syncLiveState() {
   }
   syncInFlight = true;
   try {
-    const data = await request("/api/me");
+    const data = activeChatMode === "global" ? await request("/api/global-chat") : await request("/api/me");
     const nextUserSnapshot = snapshotUser(data.user);
     const nextHistorySnapshot = snapshotHistory(data.history);
 
@@ -316,6 +327,7 @@ function startLiveSync() {
 
 async function boot() {
   try {
+    setChatMode("private");
     const data = await request("/api/me");
     applyUser(data.user);
     renderHistory(data.history);
@@ -367,7 +379,25 @@ logoutButton.addEventListener("click", async () => {
 });
 
 newChatButton.addEventListener("click", () => {
+  setChatMode("private");
   clearMessages();
+  void syncLiveState();
+});
+
+globalChatButton.addEventListener("click", async () => {
+  setChatMode("global");
+  clearMessages();
+  try {
+    const data = await request("/api/global-chat");
+    if (data.user) {
+      applyUser(data.user);
+      lastUserSnapshot = snapshotUser(data.user);
+    }
+    renderHistory(data.history);
+    lastHistorySnapshot = snapshotHistory(data.history);
+  } catch (error) {
+    appendMessage("bot", error.message);
+  }
 });
 
 tasksButton.addEventListener("click", () => {
@@ -407,6 +437,7 @@ promoForm.addEventListener("submit", async (event) => {
 
 deleteChatButton.addEventListener("click", async () => {
   await request("/api/chat/clear", {});
+  setChatMode("private");
   clearMessages();
   lastHistorySnapshot = "";
 });
@@ -423,14 +454,18 @@ form.addEventListener("submit", async (event) => {
   showTyping(/ищи|найди|что такое|че такое/i.test(message) ? "Ищу..." : "Думаю...");
 
   try {
-    const data = await request("/api/chat", { message });
+    const data = activeChatMode === "global" ? await request("/api/global-chat", { message }) : await request("/api/chat", { message });
     hideTyping();
-    appendMessage("bot", data.reply);
+    if (activeChatMode === "global") {
+      renderHistory(data.history);
+    } else {
+      appendMessage("bot", data.reply);
+    }
     if (data.user) {
       applyUser(data.user);
       lastUserSnapshot = snapshotUser(data.user);
     }
-    const currentHistory = Array.from(messages.querySelectorAll(".message")).map((node) => {
+    const currentHistory = data.history || Array.from(messages.querySelectorAll(".message")).map((node) => {
       const role = node.classList.contains("user") ? "user" : "bot";
       const bubble = node.querySelector(".bubble");
       return { role, text: bubble ? bubble.textContent : "" };
