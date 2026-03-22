@@ -140,7 +140,12 @@ function renderUsers(users) {
     titleRow.className = "user-row";
 
     const title = document.createElement("div");
-    title.innerHTML = `<strong>${user.username}</strong><div class="muted">${user.banned ? "Заблокирован" : "Активен"}</div>`;
+    const statusText = user.banned
+      ? user.banned_until
+        ? `Во временном бане до ${user.banned_until.replace("T", " ")}`
+        : "Заблокирован"
+      : "Активен";
+    title.innerHTML = `<strong>${user.username}</strong><div class="muted">${statusText}</div>`;
 
     const credits = document.createElement("div");
     credits.className = "credit-badge";
@@ -177,6 +182,37 @@ function renderUsers(users) {
       await loadUsers();
     });
 
+    const tempBanButton = document.createElement("button");
+    tempBanButton.className = "admin-button ghost";
+    tempBanButton.textContent = "Бан на время";
+    tempBanButton.addEventListener("click", async () => {
+      const raw = window.prompt("На сколько минут забанить пользователя?", "60");
+      if (raw === null) return;
+      const minutes = Number(raw);
+      if (!Number.isFinite(minutes) || minutes <= 0) {
+        loginError.textContent = "Нужно положительное число минут.";
+        return;
+      }
+      await request("/api/admin/ban-temporary", { username: user.username, minutes: Math.round(minutes) });
+      await loadUsers();
+    });
+
+    const deleteUserButton = document.createElement("button");
+    deleteUserButton.className = "admin-button ghost";
+    deleteUserButton.textContent = "Удалить";
+    deleteUserButton.addEventListener("click", async () => {
+      if (!window.confirm(`Удалить пользователя ${user.username}? Это сотрёт чат и сессию.`)) {
+        return;
+      }
+      await request("/api/admin/delete-user", { username: user.username });
+      if (activeUsername === user.username) {
+        activeUsername = "";
+        selectedUserPanel.classList.add("hidden");
+        selectedChat.innerHTML = "";
+      }
+      await loadUsers();
+    });
+
     const history = document.createElement("div");
     history.className = "history-preview";
     history.innerHTML = user.credit_history.length
@@ -187,7 +223,7 @@ function renderUsers(users) {
       : `<div class="muted">История пустая</div>`;
 
     titleRow.append(title, credits);
-    actions.append(grantInput, grantButton, banButton);
+    actions.append(grantInput, grantButton, banButton, tempBanButton, deleteUserButton);
     card.append(titleRow, stats, actions, history);
     usersList.appendChild(card);
   }
@@ -199,7 +235,12 @@ function selectUser(username) {
   activeUsername = username;
   selectedUserPanel.classList.remove("hidden");
   selectedUsername.textContent = user.username;
-  selectedUserMeta.textContent = `${user.banned ? "Заблокирован" : "Активен"} · ${user.credits} кр. · Сообщений: ${user.messages_sent}`;
+  const statusText = user.banned
+    ? user.banned_until
+      ? `Во временном бане до ${user.banned_until.replace("T", " ")}`
+      : "Заблокирован"
+    : "Активен";
+  selectedUserMeta.textContent = `${statusText} · ${user.credits} кр. · Сообщений: ${user.messages_sent}`;
   selectedChat.innerHTML = "";
 
   const recent = user.recent_chat || [];

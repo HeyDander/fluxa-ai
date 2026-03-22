@@ -1010,6 +1010,7 @@ def ensure_user_record(username: str, users: dict) -> dict:
             "credit_history": [],
             "redeemed_promos": [],
             "banned": False,
+            "banned_until": "",
             "claimed_tasks": [],
             "completed_tasks": [],
         },
@@ -1027,10 +1028,27 @@ def ensure_user_record(username: str, users: dict) -> dict:
     user.setdefault("credit_history", [])
     user.setdefault("redeemed_promos", [])
     user.setdefault("banned", False)
+    user.setdefault("banned_until", "")
     user.setdefault("claimed_tasks", [])
     user.setdefault("completed_tasks", [])
     ensure_daily_tasks(user)
     return user
+
+
+def parse_banned_until(value: str) -> dt.datetime | None:
+    if not value:
+        return None
+    try:
+        return dt.datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def is_user_banned(user: dict) -> bool:
+    banned_until = parse_banned_until(user.get("banned_until", ""))
+    if banned_until and banned_until <= dt.datetime.now():
+        user["banned_until"] = ""
+    return bool(user.get("banned")) or bool(banned_until and banned_until > dt.datetime.now())
 
 
 def current_task_day() -> str:
@@ -1067,6 +1085,8 @@ def serialize_user(user: dict, username: str, profile: dict, daily_bonus_awarded
         "credits": user.get("credits", DEFAULT_CREDITS),
         "referral_code": user.get("referral_code"),
         "referrals": user.get("referrals", 0),
+        "banned": is_user_banned(user),
+        "banned_until": user.get("banned_until", ""),
         "tasks": task_state(user, profile),
         "credit_history": user.get("credit_history", []),
         "daily_bonus_awarded": daily_bonus_awarded,
@@ -1953,7 +1973,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
             if not user:
                 return None
             ensure_user_record(username, users)
-            if user.get("banned"):
+            if is_user_banned(user):
                 return None
             daily_bonus_awarded = apply_daily_login_bonus(user)
             if daily_bonus_awarded:
@@ -2001,7 +2021,8 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                             "username": username,
                             "credits": user.get("credits", DEFAULT_CREDITS),
                             "referrals": user.get("referrals", 0),
-                            "banned": user.get("banned", False),
+                            "banned": is_user_banned(user),
+                            "banned_until": user.get("banned_until", ""),
                             "messages_sent": user.get("stats", {}).get("messages_sent", 0),
                             "searches_used": user.get("stats", {}).get("searches_used", 0),
                             "chat_messages": len(user_chat),
@@ -2042,6 +2063,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     "credit_history": [],
                     "redeemed_promos": [],
                     "banned": False,
+                    "banned_until": "",
                     "claimed_tasks": [],
                     "completed_tasks": [],
                 }
@@ -2080,7 +2102,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 user = users.get(username)
                 if not user or not verify_password(password, user["salt"], user["password_hash"]):
                     return self._send_json({"error": "Неверный логин или пароль."}, status=401)
-                if user.get("banned"):
+                if is_user_banned(user):
                     return self._send_json({"error": "Аккаунт заблокирован администратором."}, status=403)
                 ensure_user_record(username, users)
                 daily_bonus_awarded = apply_daily_login_bonus(user)
@@ -2168,8 +2190,61 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     return self._send_json({"error": "Пользователь не найден."}, status=404)
                 ensure_user_record(username, users)
                 user["banned"] = not user.get("banned", False)
+                if not user["banned"]:
+                    user["banned_until"] = ""
                 self._save_users(users)
                 return self._send_json({"ok": True, "banned": user["banned"]})
+
+            if self.path == "/api/admin/ban-temporary":
+                if not self._require_admin():
+                    return
+                payload = self._read_json()
+                if payload is None:
+                    return self._send_json({"error": "Invalid JSON"}, status=400)
+                username = str(payload.get("username", "")).strip()
+                minutes = int(payload.get("minutes", 0))
+                if not username or minutes <= 0:
+                    return self._send_json({"error": "Нужны логин и число минут."}, status=400)
+                users = self._load_users()
+                user = users.get(username)
+                if not user:
+                    return self._send_json({"error": "Пользователь не найден."}, status=404)
+                ensure_user_record(username, users)
+                user["banned"] = False
+                user["banned_until"] = (dt.datetime.now() + dt.timedelta(minutes=minutes)).isoformat(timespec="minutes")
+                self._save_users(users)
+                return self._send_json({"ok": True, "banned_until": user["banned_until"]})
+
+            if self.path == "/api/admin/delete-user":
+                if not self._require_admin():
+                    return
+                payload = self._read_json()
+                if payload is None:
+                    return self._send_json({"error": "Invalid JSON"}, status=400)
+                username = str(payload.get("username", "")).strip()
+                if not username:
+                    return self._send_json({"error": "Нужен логин пользователя."}, status=400)
+                users = self._load_users()
+                if username not in users:
+                    return self._send_json({"error": "Пользователь не найден."}, status=404)
+                users.pop(username, None)
+                self._save_users(users)
+
+                chats = self._load_chats()
+                chats.pop(username, None)
+                self._save_chats(chats)
+
+                sessions = self._load_sessions()
+                sessions = {token: value for token, value in sessions.items() if value != username}
+                self._save_sessions(sessions)
+
+                promos = self._load_promos()
+                for promo in promos.values():
+                    used_by = promo.get("used_by", [])
+                    promo["used_by"] = [value for value in used_by if value != username]
+                self._save_promos(promos)
+
+                return self._send_json({"ok": True})
 
             if self.path == "/api/admin/send-message":
                 if not self._require_admin():
