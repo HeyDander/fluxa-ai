@@ -17,11 +17,57 @@ const selectedChat = document.getElementById("selected-chat");
 const operatorForm = document.getElementById("operator-form");
 const operatorMessage = document.getElementById("operator-message");
 const operatorError = document.getElementById("operator-error");
+const funActions = document.getElementById("fun-actions");
+const funActionsError = document.getElementById("fun-actions-error");
 
 let allUsers = [];
 let apiBaseUrl = localStorage.getItem("fluxa_admin_api_url") || "";
 let adminApiKey = localStorage.getItem("fluxa_admin_api_key") || "";
 let activeUsername = "";
+
+const FUN_ACTIONS = [
+  {
+    label: "Шутка дня",
+    text: "Шутка дня: если код заработал с первого раза, где-то рядом точно сидит маг. 😄",
+  },
+  {
+    label: "Комплимент",
+    text: "Небольшой комплимент от поддержки: ты хорошо держишь темп. Так и продолжай 🙂",
+  },
+  {
+    label: "Подбодрить",
+    text: "Небольшое напоминание: даже если сейчас всё криво, это не значит, что ты далеко от нормального результата. ✨",
+  },
+  {
+    label: "Загадка",
+    text: "Загадка: чем больше берёшь, тем больше оставляешь. Что это? 👀",
+  },
+  {
+    label: "Мини-анекдот",
+    text: "Мини-анекдот: программист заходит в бар, заказывает 1 пиво, 10 пива, 0 пива и -1 пиво. 😂",
+  },
+  {
+    label: "Факт",
+    text: "Факт дня: осьминоги имеют три сердца. Просто чтобы день стал чуть интереснее 🐙",
+  },
+  {
+    label: "Мемная фраза",
+    text: "Официальное сообщение поддержки: держим вайб, не паникуем, красиво доходим до результата 😎",
+  },
+  {
+    label: "Удачи",
+    text: "Поддержка fluxa-ai желает тебе удачи. Пусть следующий ответ или идея попадут прямо в цель 🍀",
+  },
+  {
+    label: "Секретный бонус",
+    text: "Небольшой сюрприз от поддержки: тебе прилетел бонус на баланс. Пользуйся с кайфом 🎁",
+    credits: 25,
+  },
+  {
+    label: "Колесо настроения",
+    text: "Колесо настроения крутилось-крутилось и выбрало режим: сегодня ты опасно близок к красивой победе 🔮",
+  },
+];
 
 apiUrlInput.value = apiBaseUrl;
 apiKeyInput.value = adminApiKey;
@@ -154,6 +200,46 @@ function selectUser(username) {
   }
 }
 
+async function sendSupportMessage(text) {
+  await request("/api/admin/send-message", {
+    username: activeUsername,
+    text,
+  });
+}
+
+async function runFunAction(action) {
+  funActionsError.textContent = "";
+  if (!activeUsername) {
+    funActionsError.textContent = "Сначала выбери пользователя.";
+    return;
+  }
+  try {
+    if (action.credits) {
+      await request("/api/admin/grant-credits", {
+        username: activeUsername,
+        amount: action.credits,
+      });
+    }
+    await sendSupportMessage(action.text);
+    await loadUsers();
+  } catch (error) {
+    funActionsError.textContent = error.message;
+  }
+}
+
+function renderFunActions() {
+  if (!funActions) return;
+  funActions.innerHTML = "";
+  for (const action of FUN_ACTIONS) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "fun-action-button";
+    button.textContent = action.credits ? `${action.label} +${action.credits}` : action.label;
+    button.addEventListener("click", () => runFunAction(action));
+    funActions.appendChild(button);
+  }
+}
+
 async function loadUsers() {
   const data = await request("/api/admin/users");
   allUsers = data.users || [];
@@ -231,10 +317,7 @@ operatorForm.addEventListener("submit", async (event) => {
     return;
   }
   try {
-    await request("/api/admin/send-message", {
-      username: activeUsername,
-      text,
-    });
+    await sendSupportMessage(text);
     operatorMessage.value = "";
     await loadUsers();
   } catch (error) {
@@ -242,4 +325,5 @@ operatorForm.addEventListener("submit", async (event) => {
   }
 });
 
+renderFunActions();
 boot();

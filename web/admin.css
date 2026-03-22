@@ -212,6 +212,53 @@ body {
   border-color: rgba(123, 77, 255, 0.18);
 }
 
+.fun-panel {
+  margin-top: 16px;
+  padding: 18px;
+  border-radius: 24px;
+  border: 1px solid var(--line);
+  background: rgba(123, 77, 255, 0.05);
+}
+
+.fun-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fun-panel-head h3 {
+  margin: 6px 0 0;
+}
+
+.fun-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.fun-action-button {
+  border: 1px solid rgba(123, 77, 255, 0.16);
+  border-radius: 18px;
+  padding: 12px 14px;
+  cursor: pointer;
+  background: white;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+.fun-action-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(123, 77, 255, 0.34);
+  box-shadow: 0 14px 30px rgba(93, 61, 186, 0.12);
+}
+
 textarea {
   width: 100%;
   border: 1px solid transparent;
@@ -262,6 +309,10 @@ textarea:focus {
   }
 
   .admin-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fun-actions {
     grid-template-columns: 1fr;
   }
 
