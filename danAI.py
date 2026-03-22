@@ -1574,11 +1574,25 @@ def run_chat(bot: SmartChatBot) -> None:
 
 
 def make_handler(bot: SmartChatBot, web_dir: Path):
-    users = load_users()
-    chats = load_chats()
-    sessions = load_sessions()
-
     class ChatHandler(BaseHTTPRequestHandler):
+        def _load_users(self) -> dict:
+            return load_users()
+
+        def _save_users(self, users: dict) -> None:
+            save_users(users)
+
+        def _load_chats(self) -> dict:
+            return load_chats()
+
+        def _save_chats(self, chats: dict) -> None:
+            save_chats(chats)
+
+        def _load_sessions(self) -> dict:
+            return load_sessions()
+
+        def _save_sessions(self, sessions: dict) -> None:
+            save_sessions(sessions)
+
         def _send_json(self, payload: dict, status: int = 200, headers: dict | None = None) -> None:
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(status)
@@ -1622,16 +1636,18 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
             token = self._cookie_token()
             if not token:
                 return None
+            sessions = self._load_sessions()
             username = sessions.get(token)
             if not username:
                 return None
+            users = self._load_users()
             user = users.get(username)
             if not user:
                 return None
             ensure_user_record(username, users)
             daily_bonus_awarded = apply_daily_login_bonus(user)
             if daily_bonus_awarded:
-                save_users(users)
+                self._save_users(users)
             profile = load_user_profile()
             return serialize_user(user, username, profile, daily_bonus_awarded=daily_bonus_awarded)
 
@@ -1646,6 +1662,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 return self._send_json({"ok": True})
             if self.path == "/api/me":
                 user = self._current_user()
+                chats = self._load_chats()
                 history = chats.get(user["username"], []) if user else []
                 return self._send_json({"user": user, "history": history})
             self.send_error(HTTPStatus.NOT_FOUND)
@@ -1657,6 +1674,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     return self._send_json({"error": "Invalid JSON"}, status=400)
                 username = str(payload.get("username", "")).strip()
                 password = str(payload.get("password", "")).strip()
+                users = self._load_users()
                 if len(username) < 3 or len(password) < 4:
                     return self._send_json({"error": "Логин от 3 символов, пароль от 4."}, status=400)
                 if username in users:
@@ -1694,10 +1712,11 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                             record_credit_event(new_user, REFERRAL_BONUS, "Начисление", "Бонус за регистрацию по рефералу")
                             record_credit_event(existing_user, REFERRAL_BONUS, "Начисление", f"Реферал: пользователь {username}")
                             break
-                save_users(users)
+                self._save_users(users)
+                sessions = self._load_sessions()
                 token = secrets.token_hex(24)
                 sessions[token] = username
-                save_sessions(sessions)
+                self._save_sessions(sessions)
                 response_user = serialize_user(users[username], username, load_user_profile(), daily_bonus_awarded=True)
                 return self._send_json(
                     {"ok": True, "user": response_user},
@@ -1710,15 +1729,17 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     return self._send_json({"error": "Invalid JSON"}, status=400)
                 username = str(payload.get("username", "")).strip()
                 password = str(payload.get("password", "")).strip()
+                users = self._load_users()
                 user = users.get(username)
                 if not user or not verify_password(password, user["salt"], user["password_hash"]):
                     return self._send_json({"error": "Неверный логин или пароль."}, status=401)
                 ensure_user_record(username, users)
                 daily_bonus_awarded = apply_daily_login_bonus(user)
-                save_users(users)
+                self._save_users(users)
+                sessions = self._load_sessions()
                 token = secrets.token_hex(24)
                 sessions[token] = username
-                save_sessions(sessions)
+                self._save_sessions(sessions)
                 response_user = serialize_user(users[username], username, load_user_profile(), daily_bonus_awarded)
                 return self._send_json(
                     {"ok": True, "user": response_user},
@@ -1727,9 +1748,10 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
 
             if self.path == "/api/logout":
                 token = self._cookie_token()
+                sessions = self._load_sessions()
                 if token and token in sessions:
                     sessions.pop(token, None)
-                    save_sessions(sessions)
+                    self._save_sessions(sessions)
                 return self._send_json(
                     {"ok": True},
                     headers={"Set-Cookie": "fluxa_ai_session=; Max-Age=0; Path=/; SameSite=Lax"},
@@ -1744,6 +1766,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     return self._send_json({"error": "Invalid JSON"}, status=400)
                 task_id = str(payload.get("task_id", "")).strip()
                 username = current["username"]
+                users = self._load_users()
                 user = ensure_user_record(username, users)
                 current_tasks = {item["id"]: item for item in task_state(user, load_user_profile())}
                 task = current_tasks.get(task_id)
@@ -1756,7 +1779,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 user.setdefault("daily_claimed_tasks", []).append(task_id)
                 user["credits"] = user.get("credits", DEFAULT_CREDITS) + task["reward"]
                 record_credit_event(user, task["reward"], "Начисление", f"Награда за задание: {task['title']}")
-                save_users(users)
+                self._save_users(users)
                 return self._send_json({"ok": True, "user": self._current_user()})
 
             if self.path == "/api/chat/clear":
@@ -1764,8 +1787,9 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 if not current:
                     return self._send_json({"error": "Нужен вход в аккаунт."}, status=401)
                 username = current["username"]
+                chats = self._load_chats()
                 chats[username] = []
-                save_chats(chats)
+                self._save_chats(chats)
                 return self._send_json({"ok": True})
 
             if self.path != "/api/chat":
@@ -1785,6 +1809,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 return self._send_json({"error": "Empty message"}, status=400)
 
             username = current["username"]
+            users = self._load_users()
             user = ensure_user_record(username, users)
             if user.get("credits", DEFAULT_CREDITS) < MESSAGE_COST:
                 return self._send_json({"error": "Кредиты закончились. Выполни задания или пригласи друга."}, status=402)
@@ -1796,6 +1821,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
             for key, amount in classify_message_stats(message, answer).items():
                 user["stats"][key] = user["stats"].get(key, 0) + amount
                 user["daily_stats"][key] = user["daily_stats"].get(key, 0) + amount
+            chats = self._load_chats()
             chats.setdefault(username, []).extend(
                 [
                     {"role": "user", "text": message},
@@ -1804,8 +1830,8 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
             )
             chats[username] = chats[username][-100:]
             task_state(user, load_user_profile())
-            save_users(users)
-            save_chats(chats)
+            self._save_users(users)
+            self._save_chats(chats)
             return self._send_json({"reply": answer, "user": self._current_user()})
 
         def log_message(self, format: str, *args) -> None:
