@@ -40,6 +40,7 @@ SESSIONS_FILE = MODEL_DIR / "sessions.json"
 PROMOS_FILE = MODEL_DIR / "promos.json"
 WORDS_DB_FILE = Path("data/ru_RU.dic")
 SLANG_ALIASES_FILE = Path("data/ru_slang_aliases.json")
+SLANG_PHRASES_FILE = Path("data/ru_slang_phrases.json")
 TARGET_SAMPLES = 6_000_000
 TOP_K = 5
 MIN_SCORE = 0.17
@@ -412,20 +413,26 @@ def load_dotenv(path: Path = ENV_FILE) -> None:
 
 
 @lru_cache(maxsize=1)
-def load_slang_aliases() -> dict[str, str]:
-    if not SLANG_ALIASES_FILE.exists():
+def _load_alias_file(path: Path) -> dict[str, str]:
+    if not path.exists():
         return {}
     try:
-        payload = json.loads(SLANG_ALIASES_FILE.read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
-
     aliases: dict[str, str] = {}
     for key, value in payload.items():
         normalized_key = str(key).strip().lower().replace("ё", "е")
         normalized_value = str(value).strip().lower().replace("ё", "е")
         if normalized_key and normalized_value:
             aliases[normalized_key] = normalized_value
+    return aliases
+
+
+@lru_cache(maxsize=1)
+def load_slang_aliases() -> dict[str, str]:
+    aliases = _load_alias_file(SLANG_ALIASES_FILE)
+    aliases.update(_load_alias_file(SLANG_PHRASES_FILE))
     return aliases
 
 
