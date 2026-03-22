@@ -29,6 +29,7 @@ MEMORY_FILE = MODEL_DIR / "user_memory.txt"
 PROFILE_FILE = MODEL_DIR / "user_profile.json"
 USERS_FILE = MODEL_DIR / "users.json"
 CHATS_FILE = MODEL_DIR / "chats.json"
+SESSIONS_FILE = MODEL_DIR / "sessions.json"
 TARGET_SAMPLES = 6_000_000
 TOP_K = 5
 MIN_SCORE = 0.17
@@ -676,6 +677,20 @@ def load_chats(path: Path = CHATS_FILE) -> dict:
 def save_chats(chats: dict, path: Path = CHATS_FILE) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(chats, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def load_sessions(path: Path = SESSIONS_FILE) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def save_sessions(sessions: dict, path: Path = SESSIONS_FILE) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(sessions, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def ensure_user_record(username: str, users: dict) -> dict:
@@ -1376,7 +1391,7 @@ def run_chat(bot: SmartChatBot) -> None:
 def make_handler(bot: SmartChatBot, web_dir: Path):
     users = load_users()
     chats = load_chats()
-    sessions: dict[str, str] = {}
+    sessions = load_sessions()
 
     class ChatHandler(BaseHTTPRequestHandler):
         def _send_json(self, payload: dict, status: int = 200, headers: dict | None = None) -> None:
@@ -1491,8 +1506,16 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 save_users(users)
                 token = secrets.token_hex(24)
                 sessions[token] = username
+                save_sessions(sessions)
+                response_user = {
+                    "username": username,
+                    "credits": users[username].get("credits", DEFAULT_CREDITS),
+                    "referral_code": users[username].get("referral_code"),
+                    "referrals": users[username].get("referrals", 0),
+                    "tasks": task_state(users[username], load_user_profile()),
+                }
                 return self._send_json(
-                    {"ok": True, "user": self._current_user()},
+                    {"ok": True, "user": response_user},
                     headers={"Set-Cookie": f"fluxa_ai_session={token}; HttpOnly; Path=/; SameSite=Lax"},
                 )
 
@@ -1508,8 +1531,16 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 ensure_user_record(username, users)
                 token = secrets.token_hex(24)
                 sessions[token] = username
+                save_sessions(sessions)
+                response_user = {
+                    "username": username,
+                    "credits": users[username].get("credits", DEFAULT_CREDITS),
+                    "referral_code": users[username].get("referral_code"),
+                    "referrals": users[username].get("referrals", 0),
+                    "tasks": task_state(users[username], load_user_profile()),
+                }
                 return self._send_json(
-                    {"ok": True, "user": self._current_user()},
+                    {"ok": True, "user": response_user},
                     headers={"Set-Cookie": f"fluxa_ai_session={token}; HttpOnly; Path=/; SameSite=Lax"},
                 )
 
@@ -1517,6 +1548,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 token = self._cookie_token()
                 if token and token in sessions:
                     sessions.pop(token, None)
+                    save_sessions(sessions)
                 return self._send_json(
                     {"ok": True},
                     headers={"Set-Cookie": "fluxa_ai_session=; Max-Age=0; Path=/; SameSite=Lax"},
