@@ -47,6 +47,7 @@ MIN_SCORE = 0.17
 RANDOM_SEED = 42
 INDEX_VERSION = 4
 SERPAPI_ENDPOINT = "https://serpapi.com/search.json"
+DATABASE_RUNTIME_ERROR = ""
 
 STOPWORDS = {
     "а",
@@ -845,38 +846,57 @@ def database_enabled() -> bool:
     return bool(get_database_url()) and psycopg is not None
 
 
+def set_database_runtime_error(error: str) -> None:
+    global DATABASE_RUNTIME_ERROR
+    DATABASE_RUNTIME_ERROR = error
+
+
+def clear_database_runtime_error() -> None:
+    global DATABASE_RUNTIME_ERROR
+    DATABASE_RUNTIME_ERROR = ""
+
+
 def storage_mode() -> str:
-    return "postgres" if database_enabled() else "local"
+    return "postgres" if database_enabled() and not DATABASE_RUNTIME_ERROR else "local"
 
 
 def init_database() -> None:
     if not database_enabled():
         return
-    with psycopg.connect(get_database_url()) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS app_state (
-                    key TEXT PRIMARY KEY,
-                    value JSONB NOT NULL DEFAULT '{}'::jsonb
+    try:
+        with psycopg.connect(get_database_url()) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS app_state (
+                        key TEXT PRIMARY KEY,
+                        value JSONB NOT NULL DEFAULT '{}'::jsonb
+                    )
+                    """
                 )
-                """
-            )
-        conn.commit()
+            conn.commit()
+        clear_database_runtime_error()
+    except Exception as error:
+        set_database_runtime_error(str(error))
+        print(f"[fluxa-ai] Postgres init failed, falling back to local storage: {error}")
 
 
 def load_state(key: str, fallback_path: Path) -> dict:
-    if database_enabled():
-        with psycopg.connect(get_database_url()) as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT value::text FROM app_state WHERE key = %s", (key,))
-                row = cur.fetchone()
-                if row:
-                    return json.loads(row[0]) if row[0] else {}
+    if database_enabled() and not DATABASE_RUNTIME_ERROR:
+        try:
+            with psycopg.connect(get_database_url()) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT value::text FROM app_state WHERE key = %s", (key,))
+                    row = cur.fetchone()
+                    if row:
+                        clear_database_runtime_error()
+                        return json.loads(row[0]) if row[0] else {}
+        except Exception as error:
+            set_database_runtime_error(str(error))
+            print(f"[fluxa-ai] Postgres read failed, using local fallback: {error}")
         if fallback_path.exists():
             try:
                 value = json.loads(fallback_path.read_text(encoding="utf-8"))
-                save_state(key, value, fallback_path)
                 return value
             except Exception:
                 return {}
@@ -891,19 +911,24 @@ def load_state(key: str, fallback_path: Path) -> dict:
 
 
 def save_state(key: str, value: dict, fallback_path: Path) -> None:
-    if database_enabled():
-        with psycopg.connect(get_database_url()) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO app_state (key, value)
-                    VALUES (%s, %s::jsonb)
-                    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
-                    """,
-                    (key, json.dumps(value, ensure_ascii=False)),
-                )
-            conn.commit()
-        return
+    if database_enabled() and not DATABASE_RUNTIME_ERROR:
+        try:
+            with psycopg.connect(get_database_url()) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO app_state (key, value)
+                        VALUES (%s, %s::jsonb)
+                        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+                        """,
+                        (key, json.dumps(value, ensure_ascii=False)),
+                    )
+                conn.commit()
+            clear_database_runtime_error()
+            return
+        except Exception as error:
+            set_database_runtime_error(str(error))
+            print(f"[fluxa-ai] Postgres write failed, using local fallback: {error}")
 
     fallback_path.parent.mkdir(parents=True, exist_ok=True)
     fallback_path.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1864,7 +1889,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
             if self.path == "/styles.css":
                 return self._send_file(web_dir / "styles.css", "text/css; charset=utf-8")
             if self.path == "/api/health":
-                return self._send_json({"ok": True, "storage": storage_mode()})
+                return self._send_json({"ok": True, "storage": storage_mode(), "database_error": DATABASE_RUNTIME_ERROR})
             if self.path == "/api/me":
                 user = self._current_user()
                 chats = self._load_chats()
