@@ -27,6 +27,7 @@ let activeUsername = "";
 let liveUsersTimer = null;
 let usersRequestInFlight = false;
 let grantAmountDraft = localStorage.getItem("fluxa_admin_grant_amount") || "400";
+const MAX_GRANT_AMOUNT = 1_000_000_000_000;
 
 const FUN_ACTIONS = [
   {
@@ -161,9 +162,16 @@ function renderUsers(users) {
 
     const grantInput = document.createElement("input");
     grantInput.type = "number";
+    grantInput.min = "0";
+    grantInput.max = String(MAX_GRANT_AMOUNT);
+    grantInput.step = "1";
     grantInput.value = grantAmountDraft;
     grantInput.className = "grant-input";
     grantInput.addEventListener("input", () => {
+      const numeric = Number(grantInput.value || 0);
+      if (Number.isFinite(numeric) && numeric > MAX_GRANT_AMOUNT) {
+        grantInput.value = String(MAX_GRANT_AMOUNT);
+      }
       grantAmountDraft = grantInput.value || "0";
       localStorage.setItem("fluxa_admin_grant_amount", grantAmountDraft);
     });
@@ -172,9 +180,18 @@ function renderUsers(users) {
     grantButton.className = "admin-button";
     grantButton.textContent = "Выдать";
     grantButton.addEventListener("click", async () => {
+      const amount = Number(grantInput.value || 0);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        loginError.textContent = "Введи нормальное число кредитов.";
+        return;
+      }
+      if (amount > MAX_GRANT_AMOUNT) {
+        loginError.textContent = `Максимум за раз: ${MAX_GRANT_AMOUNT}.`;
+        return;
+      }
       await request("/api/admin/grant-credits", {
         username: user.username,
-        amount: Number(grantInput.value || 0),
+        amount,
       });
       grantAmountDraft = grantInput.value || grantAmountDraft;
       localStorage.setItem("fluxa_admin_grant_amount", grantAmountDraft);
