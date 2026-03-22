@@ -16,6 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from http.cookies import SimpleCookie
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Iterable
 import ast
@@ -37,6 +38,7 @@ USERS_FILE = MODEL_DIR / "users.json"
 CHATS_FILE = MODEL_DIR / "chats.json"
 SESSIONS_FILE = MODEL_DIR / "sessions.json"
 PROMOS_FILE = MODEL_DIR / "promos.json"
+WORDS_DB_FILE = Path("data/ru_RU.dic")
 TARGET_SAMPLES = 6_000_000
 TOP_K = 5
 MIN_SCORE = 0.17
@@ -408,12 +410,128 @@ def load_dotenv(path: Path = ENV_FILE) -> None:
             os.environ[key] = value
 
 
+@lru_cache(maxsize=1)
+def load_known_words() -> tuple[set[str], dict[tuple[str, int], tuple[str, ...]], dict[tuple[str, int], tuple[str, ...]]]:
+    if not WORDS_DB_FILE.exists():
+        return set(), {}, {}
+
+    raw_lines = WORDS_DB_FILE.read_text(encoding="utf-8").splitlines()
+    if raw_lines and raw_lines[0].strip().isdigit():
+        raw_lines = raw_lines[1:]
+
+    words: set[str] = set()
+    buckets_1: defaultdict[tuple[str, int], list[str]] = defaultdict(list)
+    buckets_2: defaultdict[tuple[str, int], list[str]] = defaultdict(list)
+    for line in raw_lines:
+        word = line.split("/", 1)[0].strip().lower().replace("ё", "е")
+        if not word or not re.fullmatch(r"[a-zа-я]+", word):
+            continue
+        if word in words:
+            continue
+        words.add(word)
+        buckets_1[(word[0], len(word))].append(word)
+        buckets_2[(word[:2], len(word))].append(word)
+
+    return (
+        words,
+        {key: tuple(value) for key, value in buckets_1.items()},
+        {key: tuple(value) for key, value in buckets_2.items()},
+    )
+
+
+def is_edit_distance_at_most_one(left: str, right: str) -> bool:
+    if left == right:
+        return True
+    if abs(len(left) - len(right)) > 1:
+        return False
+
+    if len(left) > len(right):
+        left, right = right, left
+
+    i = 0
+    j = 0
+    edits = 0
+    while i < len(left) and j < len(right):
+        if left[i] == right[j]:
+            i += 1
+            j += 1
+            continue
+        edits += 1
+        if edits > 1:
+            return False
+        if len(left) == len(right):
+            i += 1
+            j += 1
+        else:
+            j += 1
+
+    if j < len(right) or i < len(left):
+        edits += 1
+    return edits <= 1
+
+
+@lru_cache(maxsize=12000)
+def correct_token(token: str) -> str:
+    if len(token) < 6 or not re.fullmatch(r"[a-zа-я]+", token):
+        return token
+
+    words, buckets_1, buckets_2 = load_known_words()
+    if not words or token in words:
+        return token
+
+    candidates: list[str] = []
+    for size in (len(token) - 1, len(token), len(token) + 1):
+        candidates.extend(buckets_2.get((token[:2], size), ()))
+    if not candidates:
+        for size in (len(token) - 1, len(token), len(token) + 1):
+            candidates.extend(buckets_1.get((token[0], size), ()))
+    if not candidates:
+        return token
+
+    matches: list[str] = []
+    for candidate in sorted(set(candidates), key=lambda item: (abs(len(item) - len(token)), item)):
+        if len(candidate) != len(token) and len(token) < 8:
+            continue
+        if candidate[-1] != token[-1] and len(candidate) == len(token):
+            continue
+        if is_edit_distance_at_most_one(token, candidate):
+            matches.append(candidate)
+            if len(matches) > 4:
+                break
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        if len(token) <= 5:
+            return token
+        token_counter = Counter(token)
+        ranked = sorted(
+            matches,
+            key=lambda item: (
+                -sum((token_counter & Counter(item)).values()),
+                -len(os.path.commonprefix([token, item])),
+                abs(len(item) - len(token)),
+                item,
+            ),
+        )
+        if len(ranked) >= 2 and len(os.path.commonprefix([token, ranked[0]])) > len(os.path.commonprefix([token, ranked[1]])):
+            return ranked[0]
+        if len(ranked) >= 2:
+            top_overlap = sum((token_counter & Counter(ranked[0])).values())
+            next_overlap = sum((token_counter & Counter(ranked[1])).values())
+            if top_overlap > next_overlap:
+                return ranked[0]
+    return token
+
+
 def normalize(text: str) -> str:
     text = text.lower().replace("ё", "е")
     text = re.sub(r"[^a-zа-я0-9\s]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     for latin, cyrillic in LATIN_ALIASES.items():
         text = re.sub(rf"\b{re.escape(latin)}\b", cyrillic, text)
+    if not text:
+        return text
+    text = " ".join(correct_token(token) for token in text.split())
     return text
 
 
