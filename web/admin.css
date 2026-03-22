@@ -17,7 +17,6 @@ body {
   min-height: 100vh;
   font-family: Inter, "Segoe UI", sans-serif;
   color: var(--text);
-  overflow-x: hidden;
   background:
     radial-gradient(circle at top left, rgba(123, 77, 255, 0.22), transparent 25%),
     linear-gradient(180deg, #fbfaff 0%, #f2ecff 100%);
@@ -37,14 +36,12 @@ body {
   display: grid;
   align-content: start;
   gap: 18px;
-  min-width: 0;
 }
 
 .admin-main {
   padding: 20px;
   display: grid;
   gap: 16px;
-  min-width: 0;
 }
 
 .panel,
@@ -66,15 +63,12 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  min-width: 0;
 }
 
 .panel-actions {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-width: 0;
-  flex-wrap: wrap;
 }
 
 .admin-brand h1,
@@ -111,12 +105,11 @@ body {
 .search-input,
 .grant-input {
   width: 100%;
-  min-width: 0;
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: 18px;
   background: white;
   color: var(--text);
-  padding: 12px 14px;
+  padding: 14px 16px;
   font: inherit;
   outline: none;
 }
@@ -131,8 +124,7 @@ body {
 .admin-button {
   border: 0;
   border-radius: 999px;
-  padding: 10px 16px;
-  min-height: 42px;
+  padding: 12px 16px;
   cursor: pointer;
   color: white;
   font-weight: 700;
@@ -154,13 +146,11 @@ body {
   display: grid;
   grid-template-columns: minmax(320px, 460px) 1fr;
   gap: 16px;
-  min-width: 0;
 }
 
 .user-card {
   padding: 18px;
   cursor: pointer;
-  min-width: 0;
 }
 
 .user-row,
@@ -179,23 +169,10 @@ body {
 .user-actions {
   margin-top: 14px;
   justify-content: flex-start;
-  flex-wrap: wrap;
 }
 
 .grant-input {
-  width: 148px;
-  color: var(--text);
-  background: rgba(123, 77, 255, 0.05);
-  font-weight: 800;
-  text-align: center;
-  caret-color: var(--accent);
-  letter-spacing: 0.01em;
-  font-size: 15px;
-  font-variant-numeric: tabular-nums;
-}
-
-.grant-input::placeholder {
-  color: rgba(34, 24, 63, 0.42);
+  width: 120px;
 }
 
 .credit-badge {
@@ -232,7 +209,6 @@ body {
   padding: 14px;
   border-radius: 20px;
   background: rgba(123, 77, 255, 0.06);
-  min-width: 0;
 }
 
 .chat-line {
@@ -324,7 +300,6 @@ body {
 
 textarea {
   width: 100%;
-  min-width: 0;
   border: 1px solid transparent;
   border-radius: 18px;
   background: white;
@@ -355,37 +330,6 @@ textarea:focus {
   display: none;
 }
 
-@media (min-width: 1024px) {
-  .admin-main {
-    padding: 18px;
-    gap: 14px;
-  }
-
-  .admin-sidebar {
-    position: sticky;
-    top: 0;
-    max-height: 100vh;
-    overflow: auto;
-  }
-
-  .panel,
-  .admin-card {
-    padding: 18px;
-  }
-
-  .user-card {
-    padding: 16px;
-  }
-
-  .search-input {
-    width: 260px;
-  }
-
-  .panel-actions {
-    justify-content: flex-end;
-  }
-}
-
 @media (max-width: 920px) {
   .admin-shell {
     grid-template-columns: 1fr;
@@ -394,11 +338,6 @@ textarea:focus {
   .admin-sidebar {
     border-right: 0;
     border-bottom: 1px solid var(--line);
-    padding: 16px;
-  }
-
-  .admin-main {
-    padding: 16px;
   }
 
   .panel-row,
@@ -424,45 +363,5 @@ textarea:focus {
 
   .grant-input {
     width: 100%;
-  }
-}
-
-@media (max-width: 640px) {
-  .panel,
-  .admin-card,
-  .user-card {
-    border-radius: 22px;
-  }
-
-  .panel,
-  .admin-card {
-    padding: 18px;
-  }
-
-  .search-input,
-  .grant-input,
-  .admin-form input,
-  textarea {
-    font-size: 16px;
-  }
-
-  .selected-chat {
-    max-height: 50vh;
-    padding: 12px;
-  }
-
-  .chat-line {
-    padding: 12px;
-  }
-
-  .chat-line-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .chat-action-button,
-  .fun-action-button {
-    width: 100%;
-    min-height: 44px;
   }
 }
