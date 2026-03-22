@@ -29,6 +29,8 @@ let activePanelMode = "user";
 let liveUsersTimer = null;
 let usersRequestInFlight = false;
 let grantAmountDraft = localStorage.getItem("fluxa_admin_grant_amount") || "400";
+let lastGrantUsername = "";
+let lastGrantAmount = 0;
 const MAX_GRANT_AMOUNT = 1_000_000_000_000;
 
 const FUN_ACTIONS = [
@@ -195,6 +197,8 @@ function renderUsers(users) {
         username: user.username,
         amount,
       });
+      lastGrantUsername = user.username;
+      lastGrantAmount = amount;
       grantAmountDraft = grantInput.value || grantAmountDraft;
       localStorage.setItem("fluxa_admin_grant_amount", grantAmountDraft);
       await loadUsers();
@@ -247,6 +251,13 @@ function renderUsers(users) {
           .map((item) => `<div class="history-line">${item.created_at} · ${item.title} · ${item.amount > 0 ? "+" : ""}${item.amount}</div>`)
           .join("")
       : `<div class="muted">История пустая</div>`;
+
+    if (lastGrantUsername === user.username && lastGrantAmount > 0) {
+      const grantNotice = document.createElement("div");
+      grantNotice.className = "grant-notice";
+      grantNotice.textContent = `Выдано сейчас: +${lastGrantAmount}`;
+      history.prepend(grantNotice);
+    }
 
     titleRow.append(title, credits);
     actions.append(grantInput, grantButton, banButton, tempBanButton, deleteUserButton);
