@@ -340,11 +340,11 @@ async function openGlobalChatPanel() {
   selectedUserPanel.classList.remove("hidden");
   selectedUsername.textContent = "Общий чат";
   selectedUserMeta.textContent = "Все пользователи · режим модерации";
-  selectedChat.innerHTML = "";
   funActionsError.textContent = "";
   operatorError.textContent = "";
   const data = await request("/api/admin/global-chat");
   const history = data.history || [];
+  selectedChat.innerHTML = "";
   if (!history.length) {
     selectedChat.innerHTML = `<div class="muted">Общий чат пока пустой</div>`;
     return;
