@@ -145,6 +145,10 @@ function renderTasks(tasks) {
     desc.className = "hint-small";
     desc.textContent = task.description;
 
+    const progress = document.createElement("div");
+    progress.className = "hint-small";
+    progress.textContent = `Прогресс: ${task.progress}/${task.target}`;
+
     const button = document.createElement("button");
     button.className = "action-button ghost task-button";
     if (task.claimed) {
@@ -161,7 +165,7 @@ function renderTasks(tasks) {
       button.disabled = true;
     }
 
-    card.append(title, desc, button);
+    card.append(title, desc, progress, button);
     tasksList.appendChild(card);
   }
 }

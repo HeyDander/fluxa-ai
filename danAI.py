@@ -10,6 +10,7 @@ import urllib.parse
 import urllib.request
 import hashlib
 import secrets
+import datetime as dt
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from http.cookies import SimpleCookie
@@ -342,32 +343,42 @@ NUMBER_WORDS = {
     "десять": "10",
 }
 
-DEFAULT_CREDITS = 20
+DEFAULT_CREDITS = 120
 MESSAGE_COST = 1
-REFERRAL_BONUS = 10
+REFERRAL_BONUS = 20
+DAILY_TASK_COUNT = 20
+MIN_TASK_REWARD = 15
 
-TASK_DEFINITIONS = {
-    "first_message": {
-        "title": "Первая реплика",
-        "description": "Отправь первое сообщение в чат",
-        "reward": 5,
-    },
-    "use_search": {
-        "title": "Интернет-поиск",
-        "description": "Используй поиск в интернете хотя бы один раз",
-        "reward": 5,
-    },
-    "tell_name": {
-        "title": "Представься",
-        "description": "Напиши боту своё имя",
-        "reward": 5,
-    },
-    "five_messages": {
-        "title": "Небольшой диалог",
-        "description": "Отправь 5 сообщений",
-        "reward": 10,
-    },
-}
+TASK_POOL = [
+    {"id": "msg_1", "title": "Первый шаг", "description": "Отправь 1 сообщение сегодня", "reward": 15, "kind": "messages_sent", "target": 1},
+    {"id": "msg_3", "title": "Разогрев", "description": "Отправь 3 сообщения сегодня", "reward": 15, "kind": "messages_sent", "target": 3},
+    {"id": "msg_5", "title": "Диалог", "description": "Отправь 5 сообщений сегодня", "reward": 15, "kind": "messages_sent", "target": 5},
+    {"id": "msg_8", "title": "Хороший темп", "description": "Отправь 8 сообщений сегодня", "reward": 20, "kind": "messages_sent", "target": 8},
+    {"id": "msg_12", "title": "Активный чат", "description": "Отправь 12 сообщений сегодня", "reward": 20, "kind": "messages_sent", "target": 12},
+    {"id": "msg_15", "title": "Марафон", "description": "Отправь 15 сообщений сегодня", "reward": 25, "kind": "messages_sent", "target": 15},
+    {"id": "search_1", "title": "Первый поиск", "description": "Пусть бот 1 раз поищет ответ в интернете", "reward": 15, "kind": "searches_used", "target": 1},
+    {"id": "search_2", "title": "Два поиска", "description": "Используй поиск в интернете 2 раза за день", "reward": 20, "kind": "searches_used", "target": 2},
+    {"id": "search_3", "title": "Исследователь", "description": "Используй поиск в интернете 3 раза за день", "reward": 25, "kind": "searches_used", "target": 3},
+    {"id": "greet_1", "title": "Поздоровайся", "description": "Начни день с приветствия", "reward": 15, "kind": "greetings", "target": 1},
+    {"id": "intro_1", "title": "Знакомство", "description": "Представься боту сегодня", "reward": 20, "kind": "introductions", "target": 1},
+    {"id": "joke_1", "title": "Улыбнись", "description": "Попроси анекдот или шутку", "reward": 15, "kind": "joke_requests", "target": 1},
+    {"id": "math_1", "title": "Считаем", "description": "Задай один вопрос по математике", "reward": 15, "kind": "math_questions", "target": 1},
+    {"id": "code_1", "title": "Кодинг", "description": "Спроси что-нибудь про код или программирование", "reward": 20, "kind": "code_questions", "target": 1},
+    {"id": "fact_1", "title": "Любопытство", "description": "Задай познавательный вопрос", "reward": 15, "kind": "knowledge_questions", "target": 1},
+    {"id": "long_1", "title": "Развернутый запрос", "description": "Отправь одно длинное сообщение", "reward": 15, "kind": "long_messages", "target": 1},
+    {"id": "two_long", "title": "Подробности", "description": "Отправь 2 длинных сообщения за день", "reward": 20, "kind": "long_messages", "target": 2},
+    {"id": "creative_1", "title": "Творческий режим", "description": "Попроси историю, идею или что-то придумать", "reward": 20, "kind": "creative_requests", "target": 1},
+    {"id": "mood_1", "title": "Поделись настроением", "description": "Расскажи, как у тебя дела", "reward": 15, "kind": "mood_updates", "target": 1},
+    {"id": "thanks_1", "title": "Вежливость", "description": "Скажи спасибо боту", "reward": 15, "kind": "thanks_sent", "target": 1},
+    {"id": "msg_20", "title": "Серия", "description": "Отправь 20 сообщений сегодня", "reward": 30, "kind": "messages_sent", "target": 20},
+    {"id": "search_4", "title": "Глубокий поиск", "description": "Используй поиск в интернете 4 раза за день", "reward": 30, "kind": "searches_used", "target": 4},
+    {"id": "joke_2", "title": "Ещё шутка", "description": "Попроси 2 шутки или анекдота за день", "reward": 20, "kind": "joke_requests", "target": 2},
+    {"id": "code_2", "title": "Технический разговор", "description": "Задай 2 вопроса про код", "reward": 25, "kind": "code_questions", "target": 2},
+    {"id": "fact_2", "title": "Хочу знать больше", "description": "Задай 2 познавательных вопроса", "reward": 20, "kind": "knowledge_questions", "target": 2},
+    {"id": "creative_2", "title": "Воображение", "description": "Попроси 2 творческих ответа за день", "reward": 25, "kind": "creative_requests", "target": 2},
+    {"id": "thanks_2", "title": "Хороший тон", "description": "Скажи спасибо 2 раза за день", "reward": 20, "kind": "thanks_sent", "target": 2},
+    {"id": "mood_2", "title": "Открытый диалог", "description": "2 раза поделись своим состоянием за день", "reward": 20, "kind": "mood_updates", "target": 2},
+]
 
 
 @dataclass
@@ -747,6 +758,10 @@ def ensure_user_record(username: str, users: dict) -> dict:
             "referred_by": None,
             "referrals": 0,
             "stats": {"messages_sent": 0, "searches_used": 0},
+            "daily_stats": {},
+            "task_day": "",
+            "daily_claimed_tasks": [],
+            "daily_completed_tasks": [],
             "claimed_tasks": [],
             "completed_tasks": [],
         },
@@ -756,38 +771,102 @@ def ensure_user_record(username: str, users: dict) -> dict:
     user.setdefault("referred_by", None)
     user.setdefault("referrals", 0)
     user.setdefault("stats", {"messages_sent": 0, "searches_used": 0})
+    user.setdefault("daily_stats", {})
+    user.setdefault("task_day", "")
+    user.setdefault("daily_claimed_tasks", [])
+    user.setdefault("daily_completed_tasks", [])
     user.setdefault("claimed_tasks", [])
     user.setdefault("completed_tasks", [])
+    ensure_daily_tasks(user)
     return user
 
 
+def current_task_day() -> str:
+    return dt.date.today().isoformat()
+
+
+def generate_daily_tasks(day: str) -> list[dict]:
+    seed = int(hashlib.sha256(day.encode("utf-8")).hexdigest(), 16)
+    picker = random.Random(seed)
+    tasks = list(TASK_POOL)
+    picker.shuffle(tasks)
+    return [dict(item) for item in tasks[:DAILY_TASK_COUNT]]
+
+
+def ensure_daily_tasks(user: dict) -> None:
+    day = current_task_day()
+    if user.get("task_day") == day:
+        return
+    user["task_day"] = day
+    user["daily_stats"] = {}
+    user["daily_claimed_tasks"] = []
+    user["daily_completed_tasks"] = []
+
+
+def classify_message_stats(message: str, answer: str) -> dict[str, int]:
+    normalized = normalize(message)
+    events: dict[str, int] = {"messages_sent": 1}
+
+    if "Я нашёл вот что:" in answer or "поискал в интернете" in answer:
+        events["searches_used"] = 1
+    if any(word in normalized.split() for word in ("привет", "здравствуй", "privet", "hi", "hello")):
+        events["greetings"] = 1
+    if any(phrase in normalized for phrase in ("меня зовут", "мое имя", "моё имя", "я daniel", "я даниел")):
+        events["introductions"] = 1
+    if any(word in normalized for word in ("анекдот", "шутк", "прикол", "мем")):
+        events["joke_requests"] = 1
+    if any(word in normalized for word in ("код", "python", "js", "javascript", "программ", "бот", "api")):
+        events["code_questions"] = 1
+    if any(word in normalized for word in ("спасибо", "thanks", "thx", "благодар")):
+        events["thanks_sent"] = 1
+    if any(word in normalized for word in ("нормально", "хорошо", "плохо", "отлично", "грустно", "весело")):
+        events["mood_updates"] = 1
+    if any(word in normalized for word in ("придумай", "историю", "идею", "сценарий", "рассказ")):
+        events["creative_requests"] = 1
+    if len(message.strip()) >= 40:
+        events["long_messages"] = 1
+    if "?" in message or any(phrase in normalized for phrase in ("что такое", "почему", "как", "зачем", "когда")):
+        events["knowledge_questions"] = 1
+    if re.search(r"\d+\s*[\+\-\*/xх]\s*\d+", normalized) or any(
+        phrase in normalized for phrase in ("сколько будет", "чему равно", "умножить", "плюс", "минус")
+    ):
+        events["math_questions"] = 1
+
+    return events
+
+
 def task_state(user: dict, profile: dict | None = None) -> list[dict]:
-    stats = user.get("stats", {})
+    ensure_daily_tasks(user)
+    stats = user.get("daily_stats", {})
     profile = profile or {}
-    completed = set(user.get("completed_tasks", []))
-    claimed = set(user.get("claimed_tasks", []))
+    completed = set(user.get("daily_completed_tasks", []))
+    claimed = set(user.get("daily_claimed_tasks", []))
+    tasks = generate_daily_tasks(user["task_day"])
 
-    if stats.get("messages_sent", 0) >= 1:
-        completed.add("first_message")
-    if stats.get("messages_sent", 0) >= 5:
-        completed.add("five_messages")
-    if stats.get("searches_used", 0) >= 1:
-        completed.add("use_search")
-    if profile.get("name"):
-        completed.add("tell_name")
+    for task in tasks:
+        progress_value = stats.get(task["kind"], 0)
+        if task["id"] == "intro_1" and profile.get("name"):
+            progress_value = max(progress_value, 1)
+        if progress_value >= task["target"]:
+            completed.add(task["id"])
 
-    user["completed_tasks"] = sorted(completed)
+    user["daily_completed_tasks"] = sorted(completed)
 
     result = []
-    for task_id, meta in TASK_DEFINITIONS.items():
+    for meta in tasks:
+        progress_value = stats.get(meta["kind"], 0)
+        if meta["id"] == "intro_1" and profile.get("name"):
+            progress_value = max(progress_value, 1)
         result.append(
             {
-                "id": task_id,
+                "id": meta["id"],
                 "title": meta["title"],
                 "description": meta["description"],
                 "reward": meta["reward"],
-                "completed": task_id in completed,
-                "claimed": task_id in claimed,
+                "completed": meta["id"] in completed,
+                "claimed": meta["id"] in claimed,
+                "progress": progress_value,
+                "target": meta["target"],
             }
         )
     return result
@@ -1553,6 +1632,10 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     "referred_by": None,
                     "referrals": 0,
                     "stats": {"messages_sent": 0, "searches_used": 0},
+                    "daily_stats": {},
+                    "task_day": "",
+                    "daily_claimed_tasks": [],
+                    "daily_completed_tasks": [],
                     "claimed_tasks": [],
                     "completed_tasks": [],
                 }
@@ -1636,7 +1719,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     return self._send_json({"error": "Задание ещё не выполнено."}, status=400)
                 if task["claimed"]:
                     return self._send_json({"error": "Награда уже получена."}, status=400)
-                user["claimed_tasks"].append(task_id)
+                user.setdefault("daily_claimed_tasks", []).append(task_id)
                 user["credits"] = user.get("credits", DEFAULT_CREDITS) + task["reward"]
                 save_users(users)
                 return self._send_json({"ok": True, "user": self._current_user()})
@@ -1673,9 +1756,10 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
 
             answer = bot.reply(message)
             user["credits"] -= MESSAGE_COST
-            user["stats"]["messages_sent"] = user["stats"].get("messages_sent", 0) + 1
-            if "Я нашёл вот что:" in answer or "поискал в интернете" in answer:
-                user["stats"]["searches_used"] = user["stats"].get("searches_used", 0) + 1
+            ensure_daily_tasks(user)
+            for key, amount in classify_message_stats(message, answer).items():
+                user["stats"][key] = user["stats"].get(key, 0) + amount
+                user["daily_stats"][key] = user["daily_stats"].get(key, 0) + amount
             chats.setdefault(username, []).extend(
                 [
                     {"role": "user", "text": message},
