@@ -1403,8 +1403,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--train", action="store_true", help="Перестроить индекс")
     parser.add_argument("--chat", action="store_true", help="После загрузки перейти в интерактивный чат")
     parser.add_argument("--web", action="store_true", help="Запустить веб-чат")
-    parser.add_argument("--host", type=str, default="127.0.0.1", help="Хост для веб-чата")
-    parser.add_argument("--port", type=int, default=8000, help="Порт для веб-чата")
+    parser.add_argument("--host", type=str, default=os.getenv("HOST", "127.0.0.1"), help="Хост для веб-чата")
+    parser.add_argument("--port", type=int, default=int(os.getenv("PORT", "8000")), help="Порт для веб-чата")
     parser.add_argument(
         "--samples",
         type=int,

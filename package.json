@@ -1,0 +1,13 @@
+{
+  "name": "fluxa-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "fluxa-ai local chat app",
+  "scripts": {
+    "dev": "python3 danAI.py --web",
+    "chat": "python3 danAI.py",
+    "web": "python3 danAI.py --web",
+    "start": "python3 danAI.py --web",
+    "train": "python3 danAI.py --train"
+  }
+}
