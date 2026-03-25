@@ -1443,7 +1443,24 @@ class SmartChatBot:
         normalized = normalize(message)
         if detect_intent(message) in {"greeting", "thanks", "bye", "laugh", "state_good", "state_bad"}:
             return None
-        if len(extract_keywords(message)) < 1:
+
+        # Оскорбления/обращения к боту (например "ты дебил") часто не являются "запросом к знанию".
+        # Запускать интернет-поиск в таких случаях плохо: можно получить долгую/зависшую сеть,
+        # из-за чего фронт будет бесконечно показывать "Думаю...".
+        if self._is_bot_directed(message):
+            return None
+
+        # Интернет-поиск нужен в первую очередь для вопросных формулировок.
+        question_prefixes = (
+            "что", "как", "почему", "зачем", "почему", "можно ли", "кто", "где", "когда", "сколько", "чем", "какой",
+            "какая", "какое", "откуда", "куда", "который", "которую", "которое", "которые", "можешь", "умеешь",
+        )
+        is_question_like = "?" in message or normalized.startswith(question_prefixes)
+        if not is_question_like:
+            return None
+
+        # Для снижения лишних сетевых вызовов требуем минимум контекста.
+        if len(extract_keywords(message)) < 2:
             return None
 
         snippets = serpapi_search(normalized, max_results=2)
