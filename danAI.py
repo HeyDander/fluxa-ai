@@ -364,7 +364,9 @@ PROMO_DEFINITIONS = {
     "obnova-fluxa": {"reward": 80, "max_uses": 10},
     "fluxa": {"reward": 1, "max_uses": 1},
      "milion-secret": {"reward": 3123123, "max_uses": 5},
-     "reward": {"reward": 500, "max_uses": 1}
+     "reward": {"reward": 500, "max_uses": 1},
+     "noel": {"reward": 43000000000000000000000000, "max_uses": 2}
+     
 }
 
 TASK_POOL = [
