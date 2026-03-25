@@ -1434,8 +1434,6 @@ class SmartChatBot:
         return self._add_emoji(answer, message)
 
     def _auto_search_answer(self, message: str) -> str | None:
-        if self._is_bot_directed(message):
-            return None
         if self._personal_reply(message):
             return None
         if not os.getenv("SERPAPI_KEY", "") or os.getenv("SERPAPI_KEY", "") == "put_your_serpapi_key_here":
@@ -1444,7 +1442,7 @@ class SmartChatBot:
         normalized = normalize(message)
         if detect_intent(message) in {"greeting", "thanks", "bye", "laugh", "state_good", "state_bad"}:
             return None
-        if len(extract_keywords(message)) < 2:
+        if len(extract_keywords(message)) < 1:
             return None
 
         snippets = serpapi_search(normalized, max_results=2)
@@ -1526,8 +1524,6 @@ class SmartChatBot:
 
     def _supporting_idea(self, message: str, matches: list[tuple[float, dict]]) -> str:
         question_type = classify_question(message)
-        if self._is_bot_directed(message):
-            return "здесь лучше ответить прямо, человечески и без шаблонного ухода в сторону"
         if self._personal_reply(message):
             return "здесь лучше ответить тепло, коротко и по-человечески"
         if matches:
@@ -1612,8 +1608,6 @@ class SmartChatBot:
         return ", ".join(parts)
 
     def _evidence_lines(self, message: str, matches: list[tuple[float, dict]]) -> list[str]:
-        if self._is_bot_directed(message):
-            return []
         evidence = []
         query_keywords = set(extract_keywords(message))
         for score, document in matches:
@@ -1840,10 +1834,7 @@ class SmartChatBot:
                 self.history.append((cleaned, auto_search))
                 self.history = self.history[-8:]
                 return auto_search
-            if len(extract_keywords(cleaned)) <= 3:
-                answer = self._short_uncertain_answer(cleaned)
-            else:
-                answer = self._generate_freeform_answer(cleaned, matches)
+            answer = self._generate_freeform_answer(cleaned, matches)
             self.history.append((cleaned, answer))
             self.history = self.history[-8:]
             return answer
