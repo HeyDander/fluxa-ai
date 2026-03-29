@@ -275,6 +275,11 @@ GENERIC_OPENERS = {
         "Если без лишней воды,",
         "Мой взгляд такой:",
     ],
+    "request": [
+        "Сделать это можно так:",
+        "Нормальный рабочий вариант такой:",
+        "Я бы реализовал это так:",
+    ],
 }
 
 GENERIC_CLOSERS = [
@@ -289,6 +294,7 @@ DEFAULT_SUPPORT_BY_TYPE = {
     "why": "часто на это влияют усталость, неясная цель, страх ошибки или слишком большой первый шаг",
     "can": "проще всего начать с минимальной рабочей версии и дальше улучшать её по шагам",
     "opinion": "лучше сначала уточнить контекст, потом выделить главное и ответить по сути без лишней воды",
+    "request": "лучше сразу определить минимальную рабочую версию, основные экраны, данные и одно главное действие пользователя",
 }
 
 FACT_PATTERNS = [
@@ -758,6 +764,8 @@ def parse_dialogues_optional(path: Path) -> list[DialoguePair]:
 
 def classify_question(text: str) -> str:
     normalized = normalize(text)
+    if normalized.startswith(("сделай ", "добавь ", "убери ", "измени ", "почини ", "реализуй ", "нужен ", "нужна ", "нужно ")):
+        return "request"
     if normalized.startswith(("что такое", "кто такой", "кто такая", "что значит")):
         return "definition"
     if normalized.startswith(("как ", "как", "каким образом")):
@@ -1672,6 +1680,32 @@ class SmartChatBot:
 
         return None
 
+    def _feature_request_reply(self, message: str) -> str | None:
+        normalized = normalize(message)
+        request_markers = ("сделай ", "добавь ", "убери ", "измени ", "почини ", "реализуй ", "нужен ", "нужна ", "нужно ")
+        if not normalized.startswith(request_markers):
+            return None
+
+        topic = re.sub(
+            r"^(сделай|добавь|убери|измени|почини|реализуй|нужен|нужна|нужно)\s+",
+            "",
+            normalized,
+        ).strip()
+
+        if "чат рулет" in normalized:
+            return self._add_emoji(
+                "Да, чат-рулетку можно сделать. Минимальная версия такая: очередь ожидания, случайный матч двух пользователей, отдельный анонимный чат, кнопки `найти собеседника`, `следующий` и `выйти`, плюс защита от спама и жалобы.",
+                message,
+            )
+
+        if any(word in normalized for word in ("кнопк", "чат", "профил", "уведомлен", "поиск", "регистрац", "логин", "админ", "сайт", "функц")):
+            return self._add_emoji(
+                f"Да, это можно сделать. Если коротко, для `{topic or self._pick_topic(message)}` я бы сначала собрал минимальную рабочую версию, потом добавил интерфейс, хранение данных и только после этого полировку.",
+                message,
+            )
+
+        return None
+
     def _code_reply(self, message: str) -> str | None:
         normalized = normalize(message)
         if not any(word in normalized for word in ("код", "python", "js", "javascript", "html", "css", "flask", "fastapi", "telegram bot", "бот")):
@@ -2070,6 +2104,13 @@ class SmartChatBot:
             candidates.append(
                 f"Да, можно. Вопрос скорее в том, как зайти в задачу без лишней сложности с самого начала. {support}. {closer}"
             )
+        elif question_type == "request":
+            candidates.append(
+                f"{opener} сначала определи минимальную рабочую версию, потом собери основной сценарий пользователя и только после этого добавляй детали. {evidence_line}. {closer}"
+            )
+            candidates.append(
+                f"Я бы сделал это по шагам: структура функции, базовый интерфейс, хранение данных и затем полировка поведения. {support}. {closer}"
+            )
         else:
             candidates.append(
                 f"Я бы ответил так: сначала надо понять цель вопроса, затем ограничения, а потом выбрать самый практичный ход. {evidence_line}. {closer}"
@@ -2219,6 +2260,12 @@ class SmartChatBot:
             self.history.append((cleaned, meta))
             self.history = self.history[-8:]
             return meta
+
+        feature_request = self._feature_request_reply(cleaned)
+        if feature_request:
+            self.history.append((cleaned, feature_request))
+            self.history = self.history[-8:]
+            return feature_request
 
         contextual = self._context_reply(cleaned)
         if contextual:
