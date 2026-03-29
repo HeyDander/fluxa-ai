@@ -95,24 +95,24 @@ async function updateNotificationsButton() {
   try {
     const config = await getPushConfig();
     if (!config.enabled || !config.public_key) {
-      notificationsButton.textContent = "Push не настроен";
+      notificationsButton.textContent = "Пуш не настроен";
       notificationsEnabled = false;
       return;
     }
     const registration = await ensurePushRegistration();
     const subscription = registration ? await registration.pushManager.getSubscription() : null;
     if (subscription && Notification.permission === "granted") {
-      notificationsButton.textContent = "Push: вкл";
+      notificationsButton.textContent = "Пуш-уведомления включены";
       notificationsEnabled = true;
     } else if (Notification.permission === "denied") {
-      notificationsButton.textContent = "Push: заблокирован";
+      notificationsButton.textContent = "Пуш-уведомления заблокированы";
       notificationsEnabled = false;
     } else {
-      notificationsButton.textContent = "Включить push";
+      notificationsButton.textContent = "Включить пуш-уведомления";
       notificationsEnabled = false;
     }
   } catch {
-    notificationsButton.textContent = "Push недоступен";
+    notificationsButton.textContent = "Пуш-уведомления недоступны";
     notificationsEnabled = false;
   }
 }
