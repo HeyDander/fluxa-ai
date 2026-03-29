@@ -58,6 +58,7 @@ INDEX_VERSION = 4
 SERPAPI_ENDPOINT = "https://serpapi.com/search.json"
 OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses"
 DATABASE_RUNTIME_ERROR = ""
+LOCAL_ONLY_REPLIES = True
 
 STOPWORDS = {
     "а",
@@ -283,9 +284,9 @@ GENERIC_OPENERS = {
 }
 
 GENERIC_CLOSERS = [
-    "Могу уточнить.",
-    "Если надо, скажу короче.",
-    "Могу объяснить по шагам.",
+    "Если хочешь, разложу это по шагам.",
+    "Если нужно, покажу на простом примере.",
+    "Если хочешь, могу продолжить глубже.",
 ]
 
 DEFAULT_SUPPORT_BY_TYPE = {
@@ -312,6 +313,26 @@ BOT_META_RESPONSES = {
     "how_work": "Я сначала пытаюсь понять тип вопроса, потом смотрю на контекст и подходящие примеры, и только после этого формирую ответ.",
     "internet_yes": "Да, я могу искать в интернете. Что ты хочешь найти?",
     "internet_no": "Пока поиск в интернете у меня не активен. Добавь `SERPAPI_KEY` в `.env`, и тогда я смогу искать через SerpAPI.",
+}
+
+LOCAL_KNOWLEDGE = {
+    "рекурс": "Рекурсия — это когда функция вызывает саму себя, чтобы решить задачу через более маленькую версию той же задачи. Обычно у рекурсии есть базовый случай, где вызовы останавливаются.",
+    "алгоритм": "Алгоритм — это последовательность шагов для решения задачи. Хороший алгоритм понятен, конечен и даёт предсказуемый результат.",
+    "нейросет": "Нейросеть — это модель, которая учится находить закономерности в данных. Во время обучения она подстраивает свои веса, чтобы лучше предсказывать или генерировать результат.",
+    "прокрастин": "Прокрастинация обычно связана не с ленью, а с перегрузкой, страхом ошибки, неясной целью или слишком большим первым шагом.",
+    "лен": "Люди часто ленятся не потому, что они слабые, а потому что задача кажется слишком большой, награда далёкой, а энергии мало.",
+    "дисциплин": "Дисциплина лучше всего строится не на силе воли, а на простом режиме: маленький шаг, повторение, понятное время и минимум трения.",
+    "мотивац": "Мотивация нестабильна, поэтому на ней одной далеко не уехать. Надёжнее работают привычка, простой старт и понятная следующая цель.",
+    "стресс": "Стресс — это реакция организма на перегрузку или угрозу. Обычно помогает снизить хаос вокруг, сузить задачу и вернуть ощущение контроля.",
+    "сон": "Хороший сон чаще всего держится на режиме, свете утром, тишине вечером и уменьшении экрана перед сном.",
+    "сахар": "Сахар в быту обычно означает сахарозу. Это быстрый источник энергии, но в избытке он может усиливать скачки аппетита и усталость.",
+    "api": "API — это способ, по которому разные программы обмениваются данными и командами по понятным правилам.",
+    "база дан": "База данных нужна для хранения и быстрого доступа к данным. Например: пользователи, сообщения, кредиты, настройки.",
+    "postgres": "PostgreSQL — это мощная реляционная база данных. Её часто используют для хранения пользователей, чатов, платежей и другой серверной информации.",
+    "python": "Python — это язык программирования, который часто выбирают за простой синтаксис и быстрый старт в ботах, сайтах, автоматизации и анализе данных.",
+    "javascript": "JavaScript — это язык, на котором работает логика в браузере. Им делают интерфейсы, события, запросы и поведение сайта.",
+    "html": "HTML отвечает за структуру страницы: заголовки, блоки, кнопки, формы и текст.",
+    "css": "CSS отвечает за внешний вид страницы: цвета, отступы, размеры, анимации и адаптивность.",
 }
 
 JOKE_TEMPLATES = [
@@ -1585,7 +1606,7 @@ class SmartChatBot:
         self.learn_from_chat = False
         self.user_profile = load_user_profile()
         self.awaiting_search_query = False
-        self.use_openai = openai_enabled()
+        self.use_openai = False if LOCAL_ONLY_REPLIES else openai_enabled()
 
     def _vectorize(self, text: str) -> Counter:
         vector = Counter()
@@ -1704,6 +1725,20 @@ class SmartChatBot:
                 message,
             )
 
+        return None
+
+    def _local_knowledge_answer(self, message: str) -> str | None:
+        normalized = normalize(message)
+        question_type = classify_question(message)
+        for marker, explanation in LOCAL_KNOWLEDGE.items():
+            if marker in normalized:
+                if question_type == "definition":
+                    return self._add_emoji(explanation, message)
+                if question_type == "why":
+                    return self._add_emoji(explanation, message)
+                if question_type == "how_to":
+                    return self._add_emoji(f"{explanation} Если идти практично, начни с одного простого шага и проверь результат.", message)
+                return self._add_emoji(explanation, message)
         return None
 
     def _code_reply(self, message: str) -> str | None:
@@ -1893,8 +1928,6 @@ class SmartChatBot:
             "хочу чтобы ты нашел что такое ",
             "хочу чтобы ты искал ",
             "хочу чтобы ты поискал ",
-            "что такое ",
-            "че такое ",
             "найди ",
             "ищи ",
         )
@@ -2249,6 +2282,12 @@ class SmartChatBot:
             self.history = self.history[-8:]
             return code_answer
 
+        local_knowledge = self._local_knowledge_answer(cleaned)
+        if local_knowledge:
+            self.history.append((cleaned, local_knowledge))
+            self.history = self.history[-8:]
+            return local_knowledge
+
         personal = self._personal_reply(cleaned)
         if personal:
             self.history.append((cleaned, personal))
@@ -2289,11 +2328,6 @@ class SmartChatBot:
 
         matches = self._best_matches(cleaned)
         if not matches or matches[0][0] < MIN_SCORE:
-            auto_search = self._auto_search_answer(cleaned)
-            if auto_search:
-                self.history.append((cleaned, auto_search))
-                self.history = self.history[-8:]
-                return auto_search
             answer = self._generate_freeform_answer(cleaned, matches)
             self.history.append((cleaned, answer))
             self.history = self.history[-8:]
@@ -2305,13 +2339,6 @@ class SmartChatBot:
             self.history.append((cleaned, answer))
             self.history = self.history[-8:]
             return answer
-
-        if matches[0][0] < 0.32:
-            auto_search = self._auto_search_answer(cleaned)
-            if auto_search:
-                self.history.append((cleaned, auto_search))
-                self.history = self.history[-8:]
-                return auto_search
 
         answer = self._generate_freeform_answer(cleaned, matches)
         self.history.append((cleaned, answer))
