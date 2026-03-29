@@ -1234,8 +1234,11 @@ def sanitize_attachments(raw_attachments: object) -> list[dict]:
         data_url = str(raw.get("data_url", "")).strip()
         size = int(raw.get("size", 0) or 0)
 
+        preview_image_url = str(raw.get("preview_image_url", "")).strip()
+        duration = float(raw.get("duration", 0) or 0)
+
         item = {
-            "kind": kind if kind in {"file", "audio", "video"} else "file",
+            "kind": kind if kind in {"file", "audio", "video", "image"} else "file",
             "name": name,
             "mime_type": mime_type,
             "size": max(0, size),
@@ -1244,6 +1247,10 @@ def sanitize_attachments(raw_attachments: object) -> list[dict]:
             item["text_excerpt"] = text_excerpt
         if data_url and len(data_url) <= MAX_ATTACHMENT_DATA_URL_LENGTH and data_url.startswith("data:"):
             item["data_url"] = data_url
+        if preview_image_url and len(preview_image_url) <= MAX_ATTACHMENT_DATA_URL_LENGTH and preview_image_url.startswith("data:"):
+            item["preview_image_url"] = preview_image_url
+        if duration > 0:
+            item["duration"] = round(duration, 2)
         clean.append(item)
     return clean
 
@@ -1256,10 +1263,26 @@ def build_attachment_context(attachments: list[dict]) -> str:
         name = item.get("name", "file")
         kind = item.get("kind", "file")
         mime_type = item.get("mime_type", "")
+        duration = item.get("duration")
+        kind_label = {
+            "image": "изображение",
+            "video": "видео",
+            "audio": "аудио",
+            "file": "файл",
+        }.get(kind, kind)
+        meta_bits = [kind_label]
+        if mime_type:
+            meta_bits.append(mime_type)
+        if duration:
+            meta_bits.append(f"{duration} сек")
         if item.get("text_excerpt"):
-            parts.append(f"[Вложение: {name} | {mime_type or kind}]\n{item['text_excerpt']}")
+            parts.append(f"[Вложение: {name} | {' | '.join(meta_bits)}]\n{item['text_excerpt']}")
+        elif kind == "image":
+            parts.append(f"[Вложение: {name} | {' | '.join(meta_bits)}]\nПользователь приложил изображение.")
+        elif kind == "video":
+            parts.append(f"[Вложение: {name} | {' | '.join(meta_bits)}]\nПользователь приложил видео.")
         else:
-            parts.append(f"[Вложение: {name} | {mime_type or kind}]")
+            parts.append(f"[Вложение: {name} | {' | '.join(meta_bits)}]")
     return "\n\n".join(parts)
 
 
@@ -1435,7 +1458,12 @@ def extract_openai_text(payload: dict) -> str:
     return "\n".join(chunks).strip()
 
 
-def openai_generate_reply(message: str, history: list[tuple[str, str]], profile: dict | None = None) -> str | None:
+def openai_generate_reply(
+    message: str,
+    history: list[tuple[str, str]],
+    profile: dict | None = None,
+    attachments: list[dict] | None = None,
+) -> str | None:
     api_key = openai_api_key()
     if not api_key:
         return None
@@ -1479,7 +1507,14 @@ def openai_generate_reply(message: str, history: list[tuple[str, str]], profile:
         input_items.append({"role": "user", "content": [{"type": "input_text", "text": user_text}]})
         input_items.append({"role": "assistant", "content": [{"type": "input_text", "text": bot_text}]})
 
-    input_items.append({"role": "user", "content": [{"type": "input_text", "text": message}]})
+    user_content: list[dict] = [{"type": "input_text", "text": message}]
+    for item in attachments or []:
+        if item.get("kind") == "image" and item.get("data_url"):
+            user_content.append({"type": "input_image", "image_url": item["data_url"]})
+        elif item.get("kind") == "video" and item.get("preview_image_url"):
+            user_content.append({"type": "input_image", "image_url": item["preview_image_url"]})
+
+    input_items.append({"role": "user", "content": user_content})
 
     payload = {
         "model": openai_model(),
@@ -2113,7 +2148,7 @@ class SmartChatBot:
 
         return None
 
-    def reply(self, message: str) -> str:
+    def reply(self, message: str, attachments: list[dict] | None = None) -> str:
         cleaned = message.strip()
         if not cleaned:
             return "Напиши вопрос или тему, и я отвечу."
@@ -2173,7 +2208,7 @@ class SmartChatBot:
             return contextual
 
         if self.use_openai:
-            llm_answer = openai_generate_reply(cleaned, self.history, self.user_profile)
+            llm_answer = openai_generate_reply(cleaned, self.history, self.user_profile, attachments=attachments)
             if llm_answer:
                 answer = self._add_emoji(llm_answer, cleaned)
                 self.history.append((cleaned, answer))
@@ -2963,7 +2998,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 bot_input = f"{message}\n\nКонтекст вложений:\n{attachment_context}".strip()
 
             try:
-                answer = bot.reply(bot_input)
+                answer = bot.reply(bot_input, attachments=attachments)
             except Exception:
                 answer = "Я не смог нормально обработать это сообщение, но давай попробуем ещё раз чуть проще или конкретнее."
             user["credits"] -= MESSAGE_COST

@@ -118,6 +118,8 @@ function sanitizeAttachmentForSend(item) {
     size: item.size || 0,
     text_excerpt: item.text_excerpt || "",
     data_url: item.data_url || "",
+    preview_image_url: item.preview_image_url || "",
+    duration: item.duration || 0,
   };
 }
 
@@ -137,12 +139,25 @@ function buildAttachmentElements(attachments) {
       audio.controls = true;
       audio.src = item.data_url;
       wrap.appendChild(audio);
+    } else if (item.kind === "image" && item.data_url) {
+      const image = document.createElement("img");
+      image.src = item.data_url;
+      image.alt = item.name || "image";
+      image.className = "attachment-image";
+      wrap.appendChild(image);
     } else if (item.kind === "video" && item.data_url) {
       const video = document.createElement("video");
       video.controls = true;
       video.playsInline = true;
       video.src = item.data_url;
       wrap.appendChild(video);
+      if (item.preview_image_url) {
+        const image = document.createElement("img");
+        image.src = item.preview_image_url;
+        image.alt = "preview";
+        image.className = "attachment-image attachment-video-preview";
+        wrap.appendChild(image);
+      }
     } else if (item.text_excerpt) {
       const pre = document.createElement("pre");
       pre.className = "attachment-text";
@@ -169,7 +184,7 @@ async function fileToAttachment(file) {
     };
   }
 
-  if (file.type.startsWith("audio/") || file.type.startsWith("video/")) {
+  if (file.type.startsWith("image/")) {
     const dataUrl = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result || ""));
@@ -177,12 +192,38 @@ async function fileToAttachment(file) {
       reader.readAsDataURL(file);
     });
     return {
+      kind: "image",
+      name: file.name,
+      mime_type: file.type,
+      size: file.size,
+      data_url: dataUrl,
+    };
+  }
+
+  if (file.type.startsWith("audio/") || file.type.startsWith("video/")) {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    const base = {
       kind: file.type.startsWith("audio/") ? "audio" : "video",
       name: file.name,
       mime_type: file.type,
       size: file.size,
       data_url: dataUrl,
     };
+    if (file.type.startsWith("video/")) {
+      const preview = await extractVideoPreview(file);
+      if (preview.preview_image_url) {
+        base.preview_image_url = preview.preview_image_url;
+      }
+      if (preview.duration) {
+        base.duration = preview.duration;
+      }
+    }
+    return base;
   }
 
   return {
@@ -191,6 +232,45 @@ async function fileToAttachment(file) {
     mime_type: file.type,
     size: file.size,
   };
+}
+
+async function extractVideoPreview(blob) {
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const video = document.createElement("video");
+    video.src = objectUrl;
+    video.muted = true;
+    video.playsInline = true;
+
+    await new Promise((resolve, reject) => {
+      video.onloadedmetadata = () => resolve();
+      video.onerror = reject;
+    });
+
+    const targetTime = Math.min(0.25, Math.max(0, (video.duration || 0) / 4));
+    if (Number.isFinite(targetTime) && targetTime > 0) {
+      video.currentTime = targetTime;
+      await new Promise((resolve) => {
+        video.onseeked = () => resolve();
+      });
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 320;
+    canvas.height = video.videoHeight || 180;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    }
+    return {
+      preview_image_url: canvas.toDataURL("image/jpeg", 0.82),
+      duration: Number.isFinite(video.duration) ? video.duration : 0,
+    };
+  } catch {
+    return { preview_image_url: "", duration: 0 };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
 }
 
 function supportsPushNotifications() {
@@ -736,13 +816,23 @@ async function startMediaRecording(mode) {
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
-    pendingAttachments.push({
+    const attachment = {
       kind: mode === "audio" ? "audio" : "video",
       name: mode === "audio" ? `voice-${Date.now()}.webm` : `circle-${Date.now()}.webm`,
       mime_type: blob.type,
       size: blob.size,
       data_url: dataUrl,
-    });
+    };
+    if (mode === "video") {
+      const preview = await extractVideoPreview(blob);
+      if (preview.preview_image_url) {
+        attachment.preview_image_url = preview.preview_image_url;
+      }
+      if (preview.duration) {
+        attachment.duration = preview.duration;
+      }
+    }
+    pendingAttachments.push(attachment);
     pendingAttachments = pendingAttachments.slice(0, 4);
     renderAttachmentPreview();
     mediaChunks = [];

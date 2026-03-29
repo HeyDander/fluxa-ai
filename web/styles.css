@@ -466,7 +466,8 @@ body {
 .attachment-item audio,
 .attachment-item video,
 .attachment-name,
-.attachment-text {
+.attachment-text,
+.attachment-image {
   max-width: 100%;
 }
 
@@ -483,6 +484,18 @@ body {
 .attachment-item video {
   width: min(100%, 360px);
   border-radius: 16px;
+}
+
+.attachment-image {
+  width: min(100%, 360px);
+  border-radius: 16px;
+  display: block;
+  object-fit: cover;
+  border: 1px solid rgba(124, 77, 255, 0.12);
+}
+
+.attachment-video-preview {
+  max-height: 220px;
 }
 
 .composer input,
