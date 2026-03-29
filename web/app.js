@@ -88,10 +88,11 @@ async function ensurePushRegistration() {
 async function updateNotificationsButton() {
   if (!notificationsButton) return;
   if (!supportsPushNotifications()) {
-    notificationsButton.classList.add("hidden");
+    notificationsButton.disabled = true;
+    notificationsButton.textContent = "Пуш-уведомления недоступны";
     return;
   }
-  notificationsButton.classList.remove("hidden");
+  notificationsButton.disabled = false;
   try {
     const config = await getPushConfig();
     if (!config.enabled || !config.public_key) {
@@ -225,13 +226,13 @@ function applyUser(user) {
   const loggedIn = Boolean(user);
   authOverlay.classList.toggle("hidden", loggedIn);
   logoutButton.classList.toggle("hidden", !loggedIn);
-  notificationsButton.classList.toggle("hidden", !loggedIn);
   tasksButton.classList.toggle("hidden", !loggedIn);
   promoButton.classList.toggle("hidden", !loggedIn);
   if (!loggedIn) {
     tasksOverlay.classList.add("hidden");
     promoOverlay.classList.add("hidden");
-    notificationsButton.classList.add("hidden");
+    notificationsButton.disabled = true;
+    notificationsButton.textContent = "Войди, чтобы включить пуш";
   }
   accountName.textContent = loggedIn ? `Вход: ${user.username}` : "Не выполнен вход";
   creditsBalance.textContent = loggedIn ? `${user.credits} кредитов` : "0 кредитов";
@@ -245,6 +246,7 @@ function applyUser(user) {
   }
   if (loggedIn) {
     input.focus();
+    notificationsButton.disabled = false;
   }
   if (loggedIn) {
     void updateNotificationsButton();
