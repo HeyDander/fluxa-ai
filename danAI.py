@@ -1286,6 +1286,25 @@ def build_attachment_context(attachments: list[dict]) -> str:
     return "\n\n".join(parts)
 
 
+def private_chat_attachments(attachments: list[dict]) -> list[dict]:
+    result: list[dict] = []
+    for item in attachments[:MAX_ATTACHMENTS]:
+        if item.get("kind") != "file":
+            continue
+        if not item.get("text_excerpt"):
+            continue
+        result.append(
+            {
+                "kind": "file",
+                "name": item.get("name", "file"),
+                "mime_type": item.get("mime_type", ""),
+                "size": item.get("size", 0),
+                "text_excerpt": item.get("text_excerpt", "")[:MAX_ATTACHMENT_TEXT_LENGTH],
+            }
+        )
+    return result
+
+
 def serialize_user(user: dict, username: str, profile: dict, daily_bonus_awarded: bool = False) -> dict:
     return {
         "username": username,
@@ -2980,7 +2999,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 return self._send_json({"error": "Invalid JSON"}, status=400)
 
             message = str(payload.get("message", "")).strip()
-            attachments = sanitize_attachments(payload.get("attachments", []))
+            attachments = private_chat_attachments(sanitize_attachments(payload.get("attachments", [])))
             if not message:
                 if not attachments:
                     return self._send_json({"error": "Empty message"}, status=400)

@@ -62,6 +62,8 @@ let mediaChunks = [];
 let mediaMode = "";
 let mediaStream = null;
 const MAX_ATTACHMENT_SIZE = 1_500_000;
+const PRIVATE_CHAT_FILE_ACCEPT = ".txt,.md,.py,.js,.ts,.json,.html,.css,.csv,text/*";
+const GLOBAL_CHAT_FILE_ACCEPT = "*/*";
 
 function setComposerEnabled(enabled) {
   input.disabled = !enabled;
@@ -173,6 +175,9 @@ async function fileToAttachment(file) {
     throw new Error(`Файл слишком большой: ${file.name}`);
   }
   const isTextLike = file.type.startsWith("text/") || /\.(txt|md|py|js|ts|json|html|css|csv)$/i.test(file.name);
+  if (activeChatMode !== "global" && !isTextLike) {
+    throw new Error("Без API в личном чате доступны только текстовые и кодовые файлы.");
+  }
   if (isTextLike) {
     const text = await file.text();
     return {
@@ -479,6 +484,13 @@ function setChatMode(mode) {
   newChatButton.classList.toggle("active-toggle", mode === "private");
   deleteChatButton.classList.toggle("hidden", mode === "global");
   chatTitle.textContent = mode === "global" ? "Общий чат" : "Болталка как приложение";
+  if (fileInput) {
+    fileInput.accept = mode === "global" ? GLOBAL_CHAT_FILE_ACCEPT : PRIVATE_CHAT_FILE_ACCEPT;
+  }
+  if (mode !== "global") {
+    pendingAttachments = pendingAttachments.filter((item) => item.kind === "file" && item.text_excerpt);
+    renderAttachmentPreview();
+  }
   setComposerEnabled(!authOverlay.classList.contains("hidden"));
 }
 
@@ -750,8 +762,8 @@ if (fileInput) {
       try {
         const attachment = await fileToAttachment(file);
         pendingAttachments.push(attachment);
-      } catch {
-        showBonusToast(`Не удалось прочитать файл: ${file.name}`);
+      } catch (error) {
+        showBonusToast(error?.message || `Не удалось прочитать файл: ${file.name}`);
       }
     }
     pendingAttachments = pendingAttachments.slice(0, 4);
