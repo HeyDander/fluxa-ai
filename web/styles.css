@@ -385,6 +385,13 @@ body {
   justify-content: flex-end;
 }
 
+.icon-button {
+  min-width: 48px;
+  padding: 12px 14px;
+  font-size: 18px;
+  line-height: 1;
+}
+
 .attachment-preview {
   display: flex;
   flex-wrap: wrap;
@@ -401,6 +408,7 @@ body {
   color: var(--accent);
   font-size: 13px;
   font-weight: 700;
+  max-width: 100%;
 }
 
 .attachment-remove {
@@ -424,6 +432,13 @@ body {
 .attachment-name {
   font-size: 13px;
   font-weight: 800;
+}
+
+.attachment-item audio,
+.attachment-item video,
+.attachment-name,
+.attachment-text {
+  max-width: 100%;
 }
 
 .attachment-text {

@@ -67,14 +67,17 @@ function setComposerEnabled(enabled) {
   input.disabled = !enabled;
   sendButton.disabled = !enabled;
   attachButton.disabled = !enabled;
-  voiceButton.disabled = !enabled;
-  videoButton.disabled = !enabled;
+  const mediaAllowed = enabled && activeChatMode === "global";
+  voiceButton.disabled = !mediaAllowed;
+  videoButton.disabled = !mediaAllowed;
+  voiceButton.classList.toggle("hidden", activeChatMode !== "global");
+  videoButton.classList.toggle("hidden", activeChatMode !== "global");
 }
 
 function formatAttachmentLabel(item) {
-  if (item.kind === "audio") return `Голосовое: ${item.name}`;
-  if (item.kind === "video") return `Кружок: ${item.name}`;
-  return item.name;
+  if (item.kind === "audio") return `🎤 ${item.name}`;
+  if (item.kind === "video") return `🎥 ${item.name}`;
+  return `📎 ${item.name}`;
 }
 
 function renderAttachmentPreview() {
@@ -396,6 +399,7 @@ function setChatMode(mode) {
   newChatButton.classList.toggle("active-toggle", mode === "private");
   deleteChatButton.classList.toggle("hidden", mode === "global");
   chatTitle.textContent = mode === "global" ? "Общий чат" : "Болталка как приложение";
+  setComposerEnabled(!authOverlay.classList.contains("hidden"));
 }
 
 function renderCreditHistory(items) {
@@ -687,11 +691,15 @@ async function stopMediaRecording() {
   }
   mediaRecorder = null;
   mediaMode = "";
-  voiceButton.textContent = "Голос";
-  videoButton.textContent = "Кружок";
+  voiceButton.textContent = "🎤";
+  videoButton.textContent = "🎥";
 }
 
 async function startMediaRecording(mode) {
+  if (activeChatMode !== "global") {
+    showBonusToast("Голосовые и кружки доступны только в общем чате.");
+    return;
+  }
   if (!navigator.mediaDevices || !window.MediaRecorder) {
     showBonusToast("Запись медиа не поддерживается этим браузером.");
     return;
@@ -742,9 +750,9 @@ async function startMediaRecording(mode) {
   };
   mediaRecorder.start();
   if (mode === "audio") {
-    voiceButton.textContent = "Стоп голос";
+    voiceButton.textContent = "⏹";
   } else {
-    videoButton.textContent = "Стоп кружок";
+    videoButton.textContent = "⏺";
   }
 }
 
