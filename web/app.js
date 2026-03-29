@@ -49,27 +49,70 @@ let lastGlobalHistorySnapshot = "";
 let lastGlobalMessageCount = 0;
 let notificationsEnabled = false;
 let baseDocumentTitle = document.title;
+let pushRegistration = null;
+let pushConfig = null;
 
 function setComposerEnabled(enabled) {
   input.disabled = !enabled;
   sendButton.disabled = !enabled;
 }
 
-function updateNotificationsButton() {
+function supportsPushNotifications() {
+  return "serviceWorker" in navigator && "PushManager" in window && typeof Notification !== "undefined";
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+async function getPushConfig() {
+  if (pushConfig) return pushConfig;
+  pushConfig = await request("/api/push/config");
+  return pushConfig;
+}
+
+async function ensurePushRegistration() {
+  if (!supportsPushNotifications()) return null;
+  if (pushRegistration) return pushRegistration;
+  pushRegistration = await navigator.serviceWorker.register("/sw.js");
+  return pushRegistration;
+}
+
+async function updateNotificationsButton() {
   if (!notificationsButton) return;
-  if (typeof Notification === "undefined") {
+  if (!supportsPushNotifications()) {
     notificationsButton.classList.add("hidden");
     return;
   }
   notificationsButton.classList.remove("hidden");
-  if (Notification.permission === "granted") {
-    notificationsButton.textContent = "Уведомления: вкл";
-    notificationsEnabled = true;
-  } else if (Notification.permission === "denied") {
-    notificationsButton.textContent = "Уведомления: выкл";
-    notificationsEnabled = false;
-  } else {
-    notificationsButton.textContent = "Включить уведомления";
+  try {
+    const config = await getPushConfig();
+    if (!config.enabled || !config.public_key) {
+      notificationsButton.textContent = "Push не настроен";
+      notificationsEnabled = false;
+      return;
+    }
+    const registration = await ensurePushRegistration();
+    const subscription = registration ? await registration.pushManager.getSubscription() : null;
+    if (subscription && Notification.permission === "granted") {
+      notificationsButton.textContent = "Push: вкл";
+      notificationsEnabled = true;
+    } else if (Notification.permission === "denied") {
+      notificationsButton.textContent = "Push: заблокирован";
+      notificationsEnabled = false;
+    } else {
+      notificationsButton.textContent = "Включить push";
+      notificationsEnabled = false;
+    }
+  } catch {
+    notificationsButton.textContent = "Push недоступен";
     notificationsEnabled = false;
   }
 }
@@ -80,12 +123,6 @@ function setUnreadTitle(hasUnread) {
 
 function notifyGlobalMessage(author, text) {
   const body = author ? `${author}: ${text}` : text;
-  if (notificationsEnabled && typeof Notification !== "undefined" && Notification.permission === "granted") {
-    new Notification("Новое сообщение в общем чате", {
-      body,
-      tag: "fluxa-global-chat",
-    });
-  }
   showBonusToast(`Общий чат: ${body}`);
 }
 
@@ -194,6 +231,7 @@ function applyUser(user) {
   if (!loggedIn) {
     tasksOverlay.classList.add("hidden");
     promoOverlay.classList.add("hidden");
+    notificationsButton.classList.add("hidden");
   }
   accountName.textContent = loggedIn ? `Вход: ${user.username}` : "Не выполнен вход";
   creditsBalance.textContent = loggedIn ? `${user.credits} кредитов` : "0 кредитов";
@@ -208,7 +246,9 @@ function applyUser(user) {
   if (loggedIn) {
     input.focus();
   }
-  updateNotificationsButton();
+  if (loggedIn) {
+    void updateNotificationsButton();
+  }
 }
 
 function setChatMode(mode) {
@@ -476,23 +516,59 @@ globalChatButton.addEventListener("click", async () => {
 
 if (notificationsButton) {
   notificationsButton.addEventListener("click", async () => {
-    if (typeof Notification === "undefined") {
-      showBonusToast("Этот браузер не поддерживает уведомления.");
+    if (!supportsPushNotifications()) {
+      showBonusToast("Этот браузер не поддерживает push-уведомления.");
       return;
     }
-    if (Notification.permission === "granted") {
+    try {
+      const config = await getPushConfig();
+      if (!config.enabled || !config.public_key) {
+        showBonusToast("Push пока не настроен на сервере.");
+        return;
+      }
+      const registration = await ensurePushRegistration();
+      if (!registration) {
+        showBonusToast("Не удалось зарегистрировать service worker.");
+        return;
+      }
+
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(config.public_key),
+        });
+      }
+
+      await request("/api/push/subscribe", { subscription: subscription.toJSON() });
       notificationsEnabled = true;
-      updateNotificationsButton();
-      showBonusToast("Уведомления уже включены.");
-      return;
+      await updateNotificationsButton();
+      showBonusToast("Push-уведомления включены на этом устройстве.");
+    } catch (error) {
+      showBonusToast(error.message || "Не удалось включить push-уведомления.");
+      await updateNotificationsButton();
     }
-    const permission = await Notification.requestPermission();
-    notificationsEnabled = permission === "granted";
-    updateNotificationsButton();
-    showBonusToast(permission === "granted" ? "Уведомления включены." : "Браузер не дал доступ к уведомлениям.");
   });
 }
 
+boot();
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && activeChatMode === "global") {
+    setUnreadTitle(false);
+  }
+});
+
+if (supportsPushNotifications()) {
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    const data = event.data || {};
+    if (data.type === "fluxa-push-click") {
+      setChatMode("global");
+      setUnreadTitle(false);
+      void syncLiveState();
+    }
+  });
+}
 tasksButton.addEventListener("click", () => {
   tasksOverlay.classList.remove("hidden");
 });
@@ -574,13 +650,5 @@ form.addEventListener("submit", async (event) => {
     hideTyping();
     setComposerEnabled(true);
     input.focus();
-  }
-});
-
-boot();
-
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && activeChatMode === "global") {
-    setUnreadTitle(false);
   }
 });

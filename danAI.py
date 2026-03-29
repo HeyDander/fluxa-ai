@@ -27,6 +27,12 @@ try:
 except ImportError:
     psycopg = None
 
+try:
+    from pywebpush import WebPushException, webpush
+except ImportError:
+    WebPushException = Exception
+    webpush = None
+
 
 DATA_FILE = Path("data_seed.txt") if Path("data_seed.txt").exists() else Path("data.txt")
 ENV_FILE = Path(".env")
@@ -941,6 +947,68 @@ def admin_api_key() -> str:
     return os.getenv("ADMIN_API_KEY", "").strip()
 
 
+def vapid_public_key() -> str:
+    return os.getenv("VAPID_PUBLIC_KEY", "").strip()
+
+
+def vapid_private_key() -> str:
+    return os.getenv("VAPID_PRIVATE_KEY", "").strip()
+
+
+def vapid_subject() -> str:
+    return os.getenv("VAPID_SUBJECT", "mailto:admin@fluxa.local").strip() or "mailto:admin@fluxa.local"
+
+
+def push_enabled() -> bool:
+    return bool(webpush and vapid_public_key() and vapid_private_key())
+
+
+def send_push_notification(subscription: dict, payload: dict) -> tuple[bool, bool]:
+    if not push_enabled():
+        return False, False
+    try:
+        webpush(
+            subscription_info=subscription,
+            data=json.dumps(payload, ensure_ascii=False),
+            vapid_private_key=vapid_private_key(),
+            vapid_claims={"sub": vapid_subject()},
+        )
+        return True, False
+    except WebPushException as error:
+        status_code = getattr(getattr(error, "response", None), "status_code", None)
+        return False, status_code in {404, 410}
+    except Exception:
+        return False, False
+
+
+def notify_global_chat_users(users: dict, sender_username: str | None, author: str, text: str) -> bool:
+    if not push_enabled():
+        return False
+
+    changed = False
+    payload = {
+        "title": "Новое сообщение в общем чате",
+        "body": f"{author}: {text}" if author else text,
+        "url": "/",
+        "tag": "fluxa-global-chat",
+    }
+    for username, user in users.items():
+        if sender_username and username == sender_username:
+            continue
+        subscriptions = list(user.get("push_subscriptions", []))
+        if not subscriptions:
+            continue
+        keep: list[dict] = []
+        for subscription in subscriptions:
+            _, stale = send_push_notification(subscription, payload)
+            if not stale:
+                keep.append(subscription)
+        if len(keep) != len(subscriptions):
+            user["push_subscriptions"] = keep
+            changed = True
+    return changed
+
+
 def init_database() -> None:
     if not database_enabled():
         return
@@ -1099,6 +1167,7 @@ def ensure_user_record(username: str, users: dict) -> dict:
     user.setdefault("banned_until", "")
     user.setdefault("claimed_tasks", [])
     user.setdefault("completed_tasks", [])
+    user.setdefault("push_subscriptions", [])
     ensure_daily_tasks(user)
     return user
 
@@ -2188,33 +2257,38 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
             return serialize_user(user, username, profile, daily_bonus_awarded=daily_bonus_awarded)
 
         def do_GET(self) -> None:
-            if self.path in {"/", "/index.html"}:
+            request_path = self.path.split("?", 1)[0]
+            if request_path in {"/", "/index.html"}:
                 return self._send_file(web_dir / "index.html", "text/html; charset=utf-8")
-            if self.path == "/admin":
+            if request_path == "/admin":
                 return self._send_file(web_dir / "admin.html", "text/html; charset=utf-8")
-            if self.path == "/app.js":
+            if request_path == "/app.js":
                 return self._send_file(web_dir / "app.js", "application/javascript; charset=utf-8")
-            if self.path == "/admin.js":
+            if request_path == "/admin.js":
                 return self._send_file(web_dir / "admin.js", "application/javascript; charset=utf-8")
-            if self.path == "/styles.css":
+            if request_path == "/styles.css":
                 return self._send_file(web_dir / "styles.css", "text/css; charset=utf-8")
-            if self.path == "/admin.css":
+            if request_path == "/admin.css":
                 return self._send_file(web_dir / "admin.css", "text/css; charset=utf-8")
-            if self.path == "/api/health":
+            if request_path == "/sw.js":
+                return self._send_file(web_dir / "sw.js", "application/javascript; charset=utf-8")
+            if request_path == "/api/health":
                 return self._send_json({"ok": True, "storage": storage_mode(), "database_error": DATABASE_RUNTIME_ERROR})
-            if self.path == "/api/me":
+            if request_path == "/api/me":
                 user = self._current_user()
                 chats = self._load_chats()
                 history = chats.get(user["username"], []) if user else []
                 return self._send_json({"user": user, "history": history, "storage": storage_mode()})
-            if self.path == "/api/global-chat":
+            if request_path == "/api/global-chat":
                 user = self._current_user()
                 chats = self._load_chats()
                 history = chats.get(GLOBAL_CHAT_KEY, []) if user else []
                 return self._send_json({"user": user, "history": history, "storage": storage_mode()})
-            if self.path == "/api/admin/me":
+            if request_path == "/api/push/config":
+                return self._send_json({"enabled": push_enabled(), "public_key": vapid_public_key()})
+            if request_path == "/api/admin/me":
                 return self._send_json({"ok": self._is_admin(), "admin": admin_username() if self._is_admin() else None})
-            if self.path == "/api/admin/global-chat":
+            if request_path == "/api/admin/global-chat":
                 if not self._require_admin():
                     return
                 chats = self._load_chats()
@@ -2229,7 +2303,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     for index, item in enumerate(history)
                 ]
                 return self._send_json({"history": payload})
-            if self.path == "/api/admin/users":
+            if request_path == "/api/admin/users":
                 if not self._require_admin():
                     return
                 users = self._load_users()
@@ -2353,6 +2427,50 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     {"ok": True},
                     headers={"Set-Cookie": self._build_session_cookie("fluxa_ai_session", "", clear=True)},
                 )
+
+            if self.path == "/api/push/subscribe":
+                current = self._current_user()
+                if not current:
+                    return self._send_json({"error": "Нужен вход в аккаунт."}, status=401)
+                if not push_enabled():
+                    return self._send_json({"error": "Push-уведомления ещё не настроены на сервере."}, status=400)
+                payload = self._read_json()
+                if payload is None:
+                    return self._send_json({"error": "Invalid JSON"}, status=400)
+                subscription = payload.get("subscription")
+                if not isinstance(subscription, dict):
+                    return self._send_json({"error": "Нужна подписка браузера."}, status=400)
+                endpoint = str(subscription.get("endpoint", "")).strip()
+                keys = subscription.get("keys", {})
+                if not endpoint or not isinstance(keys, dict):
+                    return self._send_json({"error": "Подписка повреждена."}, status=400)
+
+                username = current["username"]
+                users = self._load_users()
+                user = ensure_user_record(username, users)
+                subscriptions = [item for item in user.get("push_subscriptions", []) if item.get("endpoint") != endpoint]
+                subscriptions.append(subscription)
+                user["push_subscriptions"] = subscriptions[-10:]
+                self._save_users(users)
+                return self._send_json({"ok": True})
+
+            if self.path == "/api/push/unsubscribe":
+                current = self._current_user()
+                if not current:
+                    return self._send_json({"error": "Нужен вход в аккаунт."}, status=401)
+                payload = self._read_json()
+                if payload is None:
+                    return self._send_json({"error": "Invalid JSON"}, status=400)
+                endpoint = str(payload.get("endpoint", "")).strip()
+                username = current["username"]
+                users = self._load_users()
+                user = ensure_user_record(username, users)
+                if endpoint:
+                    user["push_subscriptions"] = [item for item in user.get("push_subscriptions", []) if item.get("endpoint") != endpoint]
+                else:
+                    user["push_subscriptions"] = []
+                self._save_users(users)
+                return self._send_json({"ok": True})
 
             if self.path == "/api/admin/login":
                 payload = self._read_json()
@@ -2505,6 +2623,9 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     {"role": "bot", "text": text, "author": " "}
                 )
                 chats[GLOBAL_CHAT_KEY] = chats[GLOBAL_CHAT_KEY][-200:]
+                users = self._load_users()
+                if notify_global_chat_users(users, None, "fluxa-ai support", text):
+                    self._save_users(users)
                 self._save_chats(chats)
                 return self._send_json({"ok": True})
 
@@ -2683,6 +2804,8 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 chats = self._load_chats()
                 chats.setdefault(GLOBAL_CHAT_KEY, []).append({"role": "user", "text": message, "author": username})
                 chats[GLOBAL_CHAT_KEY] = chats[GLOBAL_CHAT_KEY][-200:]
+                if notify_global_chat_users(users, username, username, message):
+                    self._save_users(users)
                 self._save_users(users)
                 self._save_chats(chats)
                 return self._send_json({"ok": True, "history": chats[GLOBAL_CHAT_KEY], "user": self._current_user()})
