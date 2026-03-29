@@ -50,6 +50,7 @@ MIN_SCORE = 0.17
 RANDOM_SEED = 42
 INDEX_VERSION = 4
 SERPAPI_ENDPOINT = "https://serpapi.com/search.json"
+OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses"
 DATABASE_RUNTIME_ERROR = ""
 
 STOPWORDS = {
@@ -1288,6 +1289,108 @@ def serpapi_search(query: str, max_results: int = 3) -> list[str]:
     return snippets
 
 
+def openai_api_key() -> str:
+    return os.getenv("OPENAI_API_KEY", "").strip()
+
+
+def openai_model() -> str:
+    return os.getenv("OPENAI_MODEL", "gpt-4.1").strip() or "gpt-4.1"
+
+
+def openai_enabled() -> bool:
+    return bool(openai_api_key())
+
+
+def extract_openai_text(payload: dict) -> str:
+    direct = str(payload.get("output_text", "")).strip()
+    if direct:
+        return direct
+
+    chunks: list[str] = []
+    for item in payload.get("output", []):
+        if item.get("type") != "message":
+            continue
+        for content in item.get("content", []):
+            content_type = content.get("type")
+            if content_type in {"output_text", "text"}:
+                text = str(content.get("text", "")).strip()
+                if text:
+                    chunks.append(text)
+    return "\n".join(chunks).strip()
+
+
+def openai_generate_reply(message: str, history: list[tuple[str, str]], profile: dict | None = None) -> str | None:
+    api_key = openai_api_key()
+    if not api_key:
+        return None
+
+    profile = profile or {}
+    profile_lines = []
+    if profile.get("name"):
+        profile_lines.append(f"Имя пользователя: {profile['name']}")
+    if profile.get("likes"):
+        profile_lines.append(f"Нравится: {', '.join(profile['likes'][:5])}")
+    if profile.get("about"):
+        profile_lines.append(f"О себе: {profile['about']}")
+    if profile.get("style"):
+        profile_lines.append(f"Стиль общения: {profile['style']}")
+    profile_block = "\n".join(profile_lines) if profile_lines else "Пока фактов о пользователе мало."
+
+    input_items = [
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": (
+                        "Ты дружелюбный русскоязычный ассистент для обычного чата. "
+                        "Отвечай естественно, как современный умный чат-бот: по делу, понятно, без шаблонной воды. "
+                        "Если вопрос простой, отвечай коротко. Если вопрос сложный, объясняй ясно и человечески. "
+                        "Не выдумывай факты. Если не уверен, скажи об этом прямо. "
+                        "Не упоминай, что тебя попросили следовать инструкциям."
+                    ),
+                }
+            ],
+        },
+        {
+            "role": "system",
+            "content": [{"type": "input_text", "text": f"Контекст пользователя:\n{profile_block}"}],
+        },
+    ]
+
+    for user_text, bot_text in history[-6:]:
+        input_items.append({"role": "user", "content": [{"type": "input_text", "text": user_text}]})
+        input_items.append({"role": "assistant", "content": [{"type": "input_text", "text": bot_text}]})
+
+    input_items.append({"role": "user", "content": [{"type": "input_text", "text": message}]})
+
+    payload = {
+        "model": openai_model(),
+        "input": input_items,
+        "temperature": 0.8,
+        "max_output_tokens": 500,
+    }
+    request = urllib.request.Request(
+        OPENAI_RESPONSES_ENDPOINT,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            response_payload = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        return None
+
+    text = extract_openai_text(response_payload)
+    if not text:
+        return None
+    return re.sub(r"\s+", " ", text).strip()
+
+
 class SmartChatBot:
     def __init__(self, index: dict):
         self.documents = index["documents"]
@@ -1303,6 +1406,7 @@ class SmartChatBot:
         self.learn_from_chat = False
         self.user_profile = load_user_profile()
         self.awaiting_search_query = False
+        self.use_openai = openai_enabled()
 
     def _vectorize(self, text: str) -> Counter:
         vector = Counter()
@@ -1839,6 +1943,14 @@ class SmartChatBot:
             self.history.append((cleaned, contextual))
             self.history = self.history[-8:]
             return contextual
+
+        if self.use_openai:
+            llm_answer = openai_generate_reply(cleaned, self.history, self.user_profile)
+            if llm_answer:
+                answer = self._add_emoji(llm_answer, cleaned)
+                self.history.append((cleaned, answer))
+                self.history = self.history[-8:]
+                return answer
 
         creative = self._generate_creative_reply(cleaned, [])
         if creative:
