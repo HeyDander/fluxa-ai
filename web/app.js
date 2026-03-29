@@ -4,6 +4,7 @@ const input = document.getElementById("chat-input");
 const sendButton = document.getElementById("send-button");
 const newChatButton = document.getElementById("new-chat");
 const globalChatButton = document.getElementById("global-chat-button");
+const notificationsButton = document.getElementById("notifications-button");
 const tasksButton = document.getElementById("tasks-button");
 const promoButton = document.getElementById("promo-button");
 const deleteChatButton = document.getElementById("delete-chat");
@@ -44,10 +45,48 @@ let lastHistorySnapshot = "";
 let lastUserSnapshot = "";
 let awaitingChatReply = false;
 let activeChatMode = "private";
+let lastGlobalHistorySnapshot = "";
+let lastGlobalMessageCount = 0;
+let notificationsEnabled = false;
+let baseDocumentTitle = document.title;
 
 function setComposerEnabled(enabled) {
   input.disabled = !enabled;
   sendButton.disabled = !enabled;
+}
+
+function updateNotificationsButton() {
+  if (!notificationsButton) return;
+  if (typeof Notification === "undefined") {
+    notificationsButton.classList.add("hidden");
+    return;
+  }
+  notificationsButton.classList.remove("hidden");
+  if (Notification.permission === "granted") {
+    notificationsButton.textContent = "Уведомления: вкл";
+    notificationsEnabled = true;
+  } else if (Notification.permission === "denied") {
+    notificationsButton.textContent = "Уведомления: выкл";
+    notificationsEnabled = false;
+  } else {
+    notificationsButton.textContent = "Включить уведомления";
+    notificationsEnabled = false;
+  }
+}
+
+function setUnreadTitle(hasUnread) {
+  document.title = hasUnread ? "• fluxa-ai" : baseDocumentTitle;
+}
+
+function notifyGlobalMessage(author, text) {
+  const body = author ? `${author}: ${text}` : text;
+  if (notificationsEnabled && typeof Notification !== "undefined" && Notification.permission === "granted") {
+    new Notification("Новое сообщение в общем чате", {
+      body,
+      tag: "fluxa-global-chat",
+    });
+  }
+  showBonusToast(`Общий чат: ${body}`);
 }
 
 function clearMessages() {
@@ -149,6 +188,7 @@ function applyUser(user) {
   const loggedIn = Boolean(user);
   authOverlay.classList.toggle("hidden", loggedIn);
   logoutButton.classList.toggle("hidden", !loggedIn);
+  notificationsButton.classList.toggle("hidden", !loggedIn);
   tasksButton.classList.toggle("hidden", !loggedIn);
   promoButton.classList.toggle("hidden", !loggedIn);
   if (!loggedIn) {
@@ -168,6 +208,7 @@ function applyUser(user) {
   if (loggedIn) {
     input.focus();
   }
+  updateNotificationsButton();
 }
 
 function setChatMode(mode) {
@@ -297,9 +338,15 @@ async function syncLiveState() {
   }
   syncInFlight = true;
   try {
-    const data = activeChatMode === "global" ? await request("/api/global-chat") : await request("/api/me");
+    const [activeData, globalData] = await Promise.all([
+      activeChatMode === "global" ? request("/api/global-chat") : request("/api/me"),
+      request("/api/global-chat"),
+    ]);
+    const data = activeData;
     const nextUserSnapshot = snapshotUser(data.user);
     const nextHistorySnapshot = snapshotHistory(data.history);
+    const nextGlobalSnapshot = snapshotHistory(globalData.history);
+    const nextGlobalCount = Array.isArray(globalData.history) ? globalData.history.length : 0;
 
     if (nextUserSnapshot !== lastUserSnapshot) {
       applyUser(data.user);
@@ -310,10 +357,26 @@ async function syncLiveState() {
       renderHistory(data.history);
       lastHistorySnapshot = nextHistorySnapshot;
     }
+
+    if (lastGlobalHistorySnapshot && nextGlobalSnapshot !== lastGlobalHistorySnapshot && nextGlobalCount > lastGlobalMessageCount) {
+      const latest = globalData.history[globalData.history.length - 1];
+      const currentUsername = data.user?.username || "";
+      const isForeignMessage = latest && latest.author && latest.author !== currentUsername;
+      const shouldNotify = isForeignMessage && (activeChatMode !== "global" || document.hidden);
+      if (shouldNotify) {
+        notifyGlobalMessage(latest.author, latest.text);
+        setUnreadTitle(true);
+      }
+    }
+
+    lastGlobalHistorySnapshot = nextGlobalSnapshot;
+    lastGlobalMessageCount = nextGlobalCount;
   } catch {
     stopLiveSync();
     lastUserSnapshot = "";
     lastHistorySnapshot = "";
+    lastGlobalHistorySnapshot = "";
+    lastGlobalMessageCount = 0;
     applyUser(null);
   } finally {
     syncInFlight = false;
@@ -333,6 +396,11 @@ async function boot() {
     renderHistory(data.history);
     lastUserSnapshot = snapshotUser(data.user);
     lastHistorySnapshot = snapshotHistory(data.history);
+    try {
+      const globalData = await request("/api/global-chat");
+      lastGlobalHistorySnapshot = snapshotHistory(globalData.history);
+      lastGlobalMessageCount = Array.isArray(globalData.history) ? globalData.history.length : 0;
+    } catch {}
     if (data.user) {
       startLiveSync();
     }
@@ -375,6 +443,9 @@ logoutButton.addEventListener("click", async () => {
   stopLiveSync();
   lastUserSnapshot = "";
   lastHistorySnapshot = "";
+  lastGlobalHistorySnapshot = "";
+  lastGlobalMessageCount = 0;
+  setUnreadTitle(false);
   applyUser(null);
 });
 
@@ -386,6 +457,7 @@ newChatButton.addEventListener("click", () => {
 
 globalChatButton.addEventListener("click", async () => {
   setChatMode("global");
+  setUnreadTitle(false);
   clearMessages();
   try {
     const data = await request("/api/global-chat");
@@ -395,10 +467,31 @@ globalChatButton.addEventListener("click", async () => {
     }
     renderHistory(data.history);
     lastHistorySnapshot = snapshotHistory(data.history);
+    lastGlobalHistorySnapshot = lastHistorySnapshot;
+    lastGlobalMessageCount = Array.isArray(data.history) ? data.history.length : 0;
   } catch (error) {
     appendMessage("bot", error.message);
   }
 });
+
+if (notificationsButton) {
+  notificationsButton.addEventListener("click", async () => {
+    if (typeof Notification === "undefined") {
+      showBonusToast("Этот браузер не поддерживает уведомления.");
+      return;
+    }
+    if (Notification.permission === "granted") {
+      notificationsEnabled = true;
+      updateNotificationsButton();
+      showBonusToast("Уведомления уже включены.");
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    notificationsEnabled = permission === "granted";
+    updateNotificationsButton();
+    showBonusToast(permission === "granted" ? "Уведомления включены." : "Браузер не дал доступ к уведомлениям.");
+  });
+}
 
 tasksButton.addEventListener("click", () => {
   tasksOverlay.classList.remove("hidden");
@@ -451,13 +544,15 @@ form.addEventListener("submit", async (event) => {
   input.value = "";
   setComposerEnabled(false);
   awaitingChatReply = true;
-  showTyping(/ищи|найди|что такое|че такое/i.test(message) ? "Ищу..." : "Думаю...");
+  showTyping(activeChatMode === "global" ? "Отправляю..." : (/ищи|найди|что такое|че такое/i.test(message) ? "Ищу..." : "Думаю..."));
 
   try {
     const data = activeChatMode === "global" ? await request("/api/global-chat", { message }) : await request("/api/chat", { message });
     hideTyping();
     if (activeChatMode === "global") {
       renderHistory(data.history);
+      lastGlobalHistorySnapshot = snapshotHistory(data.history);
+      lastGlobalMessageCount = Array.isArray(data.history) ? data.history.length : 0;
     } else {
       appendMessage("bot", data.reply);
     }
@@ -483,3 +578,9 @@ form.addEventListener("submit", async (event) => {
 });
 
 boot();
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && activeChatMode === "global") {
+    setUnreadTitle(false);
+  }
+});

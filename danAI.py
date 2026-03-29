@@ -2657,11 +2657,6 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 username = current["username"]
                 users = self._load_users()
                 user = ensure_user_record(username, users)
-                if user.get("credits", DEFAULT_CREDITS) < MESSAGE_COST:
-                    return self._send_json({"error": "Кредиты закончились. Выполни задания или пригласи друга."}, status=402)
-
-                user["credits"] -= MESSAGE_COST
-                record_credit_event(user, -MESSAGE_COST, "Списание", "Сообщение в общем чате")
                 ensure_daily_tasks(user)
                 user["stats"]["messages_sent"] = user["stats"].get("messages_sent", 0) + 1
                 user["daily_stats"]["messages_sent"] = user["daily_stats"].get("messages_sent", 0) + 1
@@ -2695,7 +2690,10 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
             if user.get("credits", DEFAULT_CREDITS) < MESSAGE_COST:
                 return self._send_json({"error": "Кредиты закончились. Выполни задания или пригласи друга."}, status=402)
 
-            answer = bot.reply(message)
+            try:
+                answer = bot.reply(message)
+            except Exception:
+                answer = "Я не смог нормально обработать это сообщение, но давай попробуем ещё раз чуть проще или конкретнее."
             user["credits"] -= MESSAGE_COST
             record_credit_event(user, -MESSAGE_COST, "Списание", "Сообщение в чате")
             ensure_daily_tasks(user)
