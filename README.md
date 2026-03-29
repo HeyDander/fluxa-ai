@@ -52,3 +52,29 @@ SERPAPI_KEY=your_key_here
 
 - `data_seed.txt` is the small training seed kept in git
 - large generated data and local user files are ignored
+
+## mini_llm
+
+There is now a separate `mini_llm/` folder with a real GPT-like model written from scratch in PyTorch.
+
+It is not ChatGPT-level, but it is a real decoder-only transformer that can be trained locally and generate text on its own.
+
+Train:
+
+```bash
+python3 -m mini_llm.train --steps 2000
+```
+
+Generate:
+
+```bash
+python3 -m mini_llm.generate --prompt "user: Привет\nassistant:"
+```
+
+Chat:
+
+```bash
+python3 -m mini_llm.chat
+```
+
+See more details in [`mini_llm/README.md`](mini_llm/README.md).
