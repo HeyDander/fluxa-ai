@@ -2029,6 +2029,8 @@ def run_chat(bot: SmartChatBot) -> None:
 
 def make_handler(bot: SmartChatBot, web_dir: Path):
     class ChatHandler(BaseHTTPRequestHandler):
+        SESSION_MAX_AGE = 60 * 60 * 24 * 30
+
         def _is_admin_api_path(self) -> bool:
             return self.path.startswith("/api/admin/")
 
@@ -2073,6 +2075,23 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
 
         def _save_promos(self, promos: dict) -> None:
             save_promos(promos)
+
+        def _is_secure_request(self) -> bool:
+            forwarded_proto = self.headers.get("X-Forwarded-Proto", "").strip().lower()
+            if forwarded_proto:
+                return forwarded_proto == "https"
+            return self.headers.get("Host", "").endswith(".railway.app")
+
+        def _build_session_cookie(self, name: str, value: str, max_age: int | None = None, clear: bool = False) -> str:
+            parts = [f"{name}={value}", "HttpOnly", "Path=/", "SameSite=Lax"]
+            if self._is_secure_request():
+                parts.append("Secure")
+            if clear:
+                parts.append("Max-Age=0")
+                parts.append("Expires=Thu, 01 Jan 1970 00:00:00 GMT")
+            elif max_age is not None:
+                parts.append(f"Max-Age={max_age}")
+            return "; ".join(parts)
 
         def _send_json(self, payload: dict, status: int = 200, headers: dict | None = None) -> None:
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -2296,7 +2315,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 response_user = serialize_user(users[username], username, load_user_profile(), daily_bonus_awarded=True)
                 return self._send_json(
                     {"ok": True, "user": response_user},
-                    headers={"Set-Cookie": f"fluxa_ai_session={token}; HttpOnly; Path=/; SameSite=Lax"},
+                    headers={"Set-Cookie": self._build_session_cookie("fluxa_ai_session", token, max_age=self.SESSION_MAX_AGE)},
                 )
 
             if self.path == "/api/login":
@@ -2321,7 +2340,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 response_user = serialize_user(users[username], username, load_user_profile(), daily_bonus_awarded)
                 return self._send_json(
                     {"ok": True, "user": response_user},
-                    headers={"Set-Cookie": f"fluxa_ai_session={token}; HttpOnly; Path=/; SameSite=Lax"},
+                    headers={"Set-Cookie": self._build_session_cookie("fluxa_ai_session", token, max_age=self.SESSION_MAX_AGE)},
                 )
 
             if self.path == "/api/logout":
@@ -2332,7 +2351,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     self._save_sessions(sessions)
                 return self._send_json(
                     {"ok": True},
-                    headers={"Set-Cookie": "fluxa_ai_session=; Max-Age=0; Path=/; SameSite=Lax"},
+                    headers={"Set-Cookie": self._build_session_cookie("fluxa_ai_session", "", clear=True)},
                 )
 
             if self.path == "/api/admin/login":
@@ -2349,7 +2368,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 self._save_admin_sessions(sessions)
                 return self._send_json(
                     {"ok": True, "admin": username},
-                    headers={"Set-Cookie": f"fluxa_ai_admin_session={token}; HttpOnly; Path=/; SameSite=Lax"},
+                    headers={"Set-Cookie": self._build_session_cookie("fluxa_ai_admin_session", token, max_age=self.SESSION_MAX_AGE)},
                 )
 
             if self.path == "/api/admin/logout":
@@ -2360,7 +2379,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     self._save_admin_sessions(sessions)
                 return self._send_json(
                     {"ok": True},
-                    headers={"Set-Cookie": "fluxa_ai_admin_session=; Max-Age=0; Path=/; SameSite=Lax"},
+                    headers={"Set-Cookie": self._build_session_cookie("fluxa_ai_admin_session", "", clear=True)},
                 )
 
             if self.path == "/api/admin/grant-credits":
