@@ -379,17 +379,46 @@ body {
 
 .composer-tools {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
+  padding: 4px;
+  border-radius: 22px;
+  background: rgba(124, 77, 255, 0.06);
 }
 
 .icon-button {
+  width: 48px;
+  height: 48px;
   min-width: 48px;
-  padding: 12px 14px;
-  font-size: 18px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 18px;
+  font-size: 20px;
   line-height: 1;
+  box-shadow: 0 8px 18px rgba(124, 77, 255, 0.12);
+}
+
+.icon-button.ghost {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 241, 255, 0.96));
+}
+
+.icon-button:hover {
+  transform: translateY(-1px) scale(1.04);
+  box-shadow: 0 12px 24px rgba(124, 77, 255, 0.18);
+}
+
+.icon-button:disabled {
+  opacity: 0.45;
+  transform: none;
+  box-shadow: none;
+}
+
+.composer-tools #send-button {
+  min-height: 48px;
+  padding-inline: 18px;
 }
 
 .attachment-preview {
@@ -734,11 +763,19 @@ body {
   }
 
   .composer-tools {
-    justify-content: stretch;
+    justify-content: flex-start;
+    background: transparent;
+    padding: 0;
   }
 
-  .composer-tools .action-button {
+  .composer-tools #send-button {
     width: 100%;
+  }
+
+  .composer-tools .icon-button {
+    width: 46px;
+    height: 46px;
+    min-width: 46px;
   }
 
   .composer input,
