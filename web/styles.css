@@ -371,6 +371,76 @@ body {
   min-width: 0;
 }
 
+.composer-main {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.composer-tools {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.attachment-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.attachment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(124, 77, 255, 0.1);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.attachment-remove {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.attachment-item {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(124, 77, 255, 0.14);
+  display: grid;
+  gap: 10px;
+}
+
+.attachment-name {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.attachment-text {
+  margin: 0;
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(124, 77, 255, 0.08);
+  overflow: auto;
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.attachment-item audio,
+.attachment-item video {
+  width: min(100%, 360px);
+  border-radius: 16px;
+}
+
 .composer input,
 .auth-form input {
   width: 100%;
@@ -646,6 +716,14 @@ body {
     grid-template-columns: 1fr;
     padding: 12px;
     border-radius: 24px;
+  }
+
+  .composer-tools {
+    justify-content: stretch;
+  }
+
+  .composer-tools .action-button {
+    width: 100%;
   }
 
   .composer input,

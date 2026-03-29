@@ -35,6 +35,11 @@ const promoForm = document.getElementById("promo-form");
 const promoInput = document.getElementById("promo-input");
 const promoError = document.getElementById("promo-error");
 const bonusToast = document.getElementById("bonus-toast");
+const fileInput = document.getElementById("file-input");
+const attachButton = document.getElementById("attach-button");
+const voiceButton = document.getElementById("voice-button");
+const videoButton = document.getElementById("video-button");
+const attachmentPreview = document.getElementById("attachment-preview");
 
 let authMode = "login";
 let typingNode = null;
@@ -51,10 +56,138 @@ let notificationsEnabled = false;
 let baseDocumentTitle = document.title;
 let pushRegistration = null;
 let pushConfig = null;
+let pendingAttachments = [];
+let mediaRecorder = null;
+let mediaChunks = [];
+let mediaMode = "";
+let mediaStream = null;
+const MAX_ATTACHMENT_SIZE = 1_500_000;
 
 function setComposerEnabled(enabled) {
   input.disabled = !enabled;
   sendButton.disabled = !enabled;
+  attachButton.disabled = !enabled;
+  voiceButton.disabled = !enabled;
+  videoButton.disabled = !enabled;
+}
+
+function formatAttachmentLabel(item) {
+  if (item.kind === "audio") return `Голосовое: ${item.name}`;
+  if (item.kind === "video") return `Кружок: ${item.name}`;
+  return item.name;
+}
+
+function renderAttachmentPreview() {
+  attachmentPreview.innerHTML = "";
+  attachmentPreview.classList.toggle("hidden", pendingAttachments.length === 0);
+  for (const [index, item] of pendingAttachments.entries()) {
+    const chip = document.createElement("div");
+    chip.className = "attachment-chip";
+
+    const label = document.createElement("span");
+    label.textContent = formatAttachmentLabel(item);
+
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "attachment-remove";
+    removeButton.textContent = "×";
+    removeButton.addEventListener("click", () => {
+      pendingAttachments.splice(index, 1);
+      renderAttachmentPreview();
+    });
+
+    chip.append(label, removeButton);
+    attachmentPreview.appendChild(chip);
+  }
+}
+
+function clearPendingAttachments() {
+  pendingAttachments = [];
+  renderAttachmentPreview();
+  if (fileInput) fileInput.value = "";
+}
+
+function sanitizeAttachmentForSend(item) {
+  return {
+    kind: item.kind || "file",
+    name: item.name || "file",
+    mime_type: item.mime_type || "",
+    size: item.size || 0,
+    text_excerpt: item.text_excerpt || "",
+    data_url: item.data_url || "",
+  };
+}
+
+function buildAttachmentElements(attachments) {
+  if (!attachments || !attachments.length) return [];
+  return attachments.map((item) => {
+    const wrap = document.createElement("div");
+    wrap.className = "attachment-item";
+
+    const label = document.createElement("div");
+    label.className = "attachment-name";
+    label.textContent = formatAttachmentLabel(item);
+    wrap.appendChild(label);
+
+    if (item.kind === "audio" && item.data_url) {
+      const audio = document.createElement("audio");
+      audio.controls = true;
+      audio.src = item.data_url;
+      wrap.appendChild(audio);
+    } else if (item.kind === "video" && item.data_url) {
+      const video = document.createElement("video");
+      video.controls = true;
+      video.playsInline = true;
+      video.src = item.data_url;
+      wrap.appendChild(video);
+    } else if (item.text_excerpt) {
+      const pre = document.createElement("pre");
+      pre.className = "attachment-text";
+      pre.textContent = item.text_excerpt;
+      wrap.appendChild(pre);
+    }
+    return wrap;
+  });
+}
+
+async function fileToAttachment(file) {
+  if (file.size > MAX_ATTACHMENT_SIZE) {
+    throw new Error(`Файл слишком большой: ${file.name}`);
+  }
+  const isTextLike = file.type.startsWith("text/") || /\.(txt|md|py|js|ts|json|html|css|csv)$/i.test(file.name);
+  if (isTextLike) {
+    const text = await file.text();
+    return {
+      kind: "file",
+      name: file.name,
+      mime_type: file.type,
+      size: file.size,
+      text_excerpt: text.slice(0, 4000),
+    };
+  }
+
+  if (file.type.startsWith("audio/") || file.type.startsWith("video/")) {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    return {
+      kind: file.type.startsWith("audio/") ? "audio" : "video",
+      name: file.name,
+      mime_type: file.type,
+      size: file.size,
+      data_url: dataUrl,
+    };
+  }
+
+  return {
+    kind: "file",
+    name: file.name,
+    mime_type: file.type,
+    size: file.size,
+  };
 }
 
 function supportsPushNotifications() {
@@ -129,10 +262,11 @@ function notifyGlobalMessage(author, text) {
 
 function clearMessages() {
   messages.innerHTML = "";
+  clearPendingAttachments();
   appendMessage("bot", activeChatMode === "global" ? "Открыт общий чат. Напиши сообщение для всех." : "Новый чат начат. Напиши сообщение.");
 }
 
-function appendMessage(role, text, author = "") {
+function appendMessage(role, text, author = "", attachments = []) {
   const article = document.createElement("article");
   article.className = `message ${role}`;
 
@@ -143,6 +277,9 @@ function appendMessage(role, text, author = "") {
   const bubble = document.createElement("div");
   bubble.className = "bubble";
   bubble.textContent = author ? `${author}: ${text}` : text;
+  for (const node of buildAttachmentElements(attachments)) {
+    bubble.appendChild(node);
+  }
 
   article.appendChild(avatar);
   article.appendChild(bubble);
@@ -346,7 +483,7 @@ function renderHistory(history) {
     return;
   }
   for (const item of history) {
-    appendMessage(item.role, item.text, item.author || "");
+    appendMessage(item.role, item.text, item.author || "", item.attachments || []);
   }
 }
 
@@ -516,6 +653,123 @@ globalChatButton.addEventListener("click", async () => {
   }
 });
 
+if (attachButton) {
+  attachButton.addEventListener("click", () => {
+    if (fileInput) fileInput.click();
+  });
+}
+
+if (fileInput) {
+  fileInput.addEventListener("change", async () => {
+    const files = Array.from(fileInput.files || []).slice(0, 4);
+    for (const file of files) {
+      try {
+        const attachment = await fileToAttachment(file);
+        pendingAttachments.push(attachment);
+      } catch {
+        showBonusToast(`Не удалось прочитать файл: ${file.name}`);
+      }
+    }
+    pendingAttachments = pendingAttachments.slice(0, 4);
+    renderAttachmentPreview();
+  });
+}
+
+async function stopMediaRecording() {
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    mediaRecorder.stop();
+  }
+  if (mediaStream) {
+    for (const track of mediaStream.getTracks()) {
+      track.stop();
+    }
+    mediaStream = null;
+  }
+  mediaRecorder = null;
+  mediaMode = "";
+  voiceButton.textContent = "Голос";
+  videoButton.textContent = "Кружок";
+}
+
+async function startMediaRecording(mode) {
+  if (!navigator.mediaDevices || !window.MediaRecorder) {
+    showBonusToast("Запись медиа не поддерживается этим браузером.");
+    return;
+  }
+  if (mediaRecorder) {
+    await stopMediaRecording();
+    return;
+  }
+
+  mediaMode = mode;
+  mediaChunks = [];
+  mediaStream = await navigator.mediaDevices.getUserMedia(
+    mode === "audio"
+      ? { audio: true }
+      : { video: { facingMode: "user" }, audio: true }
+  );
+  mediaRecorder = new MediaRecorder(mediaStream);
+  mediaRecorder.ondataavailable = (event) => {
+    if (event.data && event.data.size) {
+      mediaChunks.push(event.data);
+    }
+  };
+  mediaRecorder.onstop = async () => {
+    const blob = new Blob(mediaChunks, { type: mediaRecorder?.mimeType || (mode === "audio" ? "audio/webm" : "video/webm") });
+    if (blob.size > MAX_ATTACHMENT_SIZE) {
+      showBonusToast("Медиафайл слишком большой. Запиши короче.");
+      mediaChunks = [];
+      await stopMediaRecording();
+      return;
+    }
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    pendingAttachments.push({
+      kind: mode === "audio" ? "audio" : "video",
+      name: mode === "audio" ? `voice-${Date.now()}.webm` : `circle-${Date.now()}.webm`,
+      mime_type: blob.type,
+      size: blob.size,
+      data_url: dataUrl,
+    });
+    pendingAttachments = pendingAttachments.slice(0, 4);
+    renderAttachmentPreview();
+    mediaChunks = [];
+    await stopMediaRecording();
+  };
+  mediaRecorder.start();
+  if (mode === "audio") {
+    voiceButton.textContent = "Стоп голос";
+  } else {
+    videoButton.textContent = "Стоп кружок";
+  }
+}
+
+if (voiceButton) {
+  voiceButton.addEventListener("click", async () => {
+    try {
+      await startMediaRecording("audio");
+    } catch {
+      showBonusToast("Не удалось начать запись голосового.");
+      await stopMediaRecording();
+    }
+  });
+}
+
+if (videoButton) {
+  videoButton.addEventListener("click", async () => {
+    try {
+      await startMediaRecording("video");
+    } catch {
+      showBonusToast("Не удалось начать запись кружка.");
+      await stopMediaRecording();
+    }
+  });
+}
+
 if (notificationsButton) {
   notificationsButton.addEventListener("click", async () => {
     if (!supportsPushNotifications()) {
@@ -616,16 +870,18 @@ deleteChatButton.addEventListener("click", async () => {
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const message = input.value.trim();
-  if (!message) return;
+  if (!message && pendingAttachments.length === 0) return;
 
-  appendMessage("user", message);
+  appendMessage("user", message || "(без текста)", "", pendingAttachments);
   input.value = "";
   setComposerEnabled(false);
   awaitingChatReply = true;
+  const attachmentsForSend = pendingAttachments.map(sanitizeAttachmentForSend);
   showTyping(activeChatMode === "global" ? "Отправляю..." : (/ищи|найди|что такое|че такое/i.test(message) ? "Ищу..." : "Думаю..."));
 
   try {
-    const data = activeChatMode === "global" ? await request("/api/global-chat", { message }) : await request("/api/chat", { message });
+    const payload = { message, attachments: attachmentsForSend };
+    const data = activeChatMode === "global" ? await request("/api/global-chat", payload) : await request("/api/chat", payload);
     hideTyping();
     if (activeChatMode === "global") {
       renderHistory(data.history);
@@ -650,6 +906,7 @@ form.addEventListener("submit", async (event) => {
   } finally {
     awaitingChatReply = false;
     hideTyping();
+    clearPendingAttachments();
     setComposerEnabled(true);
     input.focus();
   }

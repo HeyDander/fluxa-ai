@@ -60,6 +60,7 @@
           <p class="sidebar-label">Аккаунт</p>
           <div id="account-name" class="account-name">Не выполнен вход</div>
           <button id="logout-button" class="action-button hidden">Выйти</button>
+          <div class="hint-small"><a href="/privacy">Политика конфиденциальности</a></div>
         </div>
       </aside>
 
@@ -79,8 +80,17 @@
         </section>
 
         <form id="chat-form" class="composer">
-          <input id="chat-input" type="text" placeholder="Напиши сообщение..." autocomplete="off" disabled />
-          <button id="send-button" type="submit" class="action-button" disabled>Отправить</button>
+          <div class="composer-main">
+            <input id="chat-input" type="text" placeholder="Напиши сообщение..." autocomplete="off" disabled />
+            <div id="attachment-preview" class="attachment-preview hidden"></div>
+          </div>
+          <div class="composer-tools">
+            <input id="file-input" type="file" class="hidden" multiple />
+            <button id="attach-button" type="button" class="action-button ghost small">Файл</button>
+            <button id="voice-button" type="button" class="action-button ghost small">Голос</button>
+            <button id="video-button" type="button" class="action-button ghost small">Кружок</button>
+            <button id="send-button" type="submit" class="action-button" disabled>Отправить</button>
+          </div>
         </form>
       </main>
     </div>

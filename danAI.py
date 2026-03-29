@@ -363,6 +363,9 @@ DEFAULT_CREDITS = 400
 MESSAGE_COST = 1
 REFERRAL_BONUS = 20
 DAILY_LOGIN_BONUS = 10
+MAX_ATTACHMENTS = 4
+MAX_ATTACHMENT_DATA_URL_LENGTH = 1_500_000
+MAX_ATTACHMENT_TEXT_LENGTH = 4_000
 DAILY_TASK_COUNT = 20
 MIN_TASK_REWARD = 20
 PROMO_DEFINITIONS = {
@@ -1216,6 +1219,50 @@ def record_credit_event(user: dict, amount: int, title: str, description: str) -
     user["credit_history"] = history[:25]
 
 
+def sanitize_attachments(raw_attachments: object) -> list[dict]:
+    if not isinstance(raw_attachments, list):
+        return []
+
+    clean: list[dict] = []
+    for raw in raw_attachments[:MAX_ATTACHMENTS]:
+        if not isinstance(raw, dict):
+            continue
+        kind = str(raw.get("kind", "file")).strip().lower()
+        name = str(raw.get("name", "file")).strip()[:120] or "file"
+        mime_type = str(raw.get("mime_type", "")).strip()[:120]
+        text_excerpt = str(raw.get("text_excerpt", "")).strip()[:MAX_ATTACHMENT_TEXT_LENGTH]
+        data_url = str(raw.get("data_url", "")).strip()
+        size = int(raw.get("size", 0) or 0)
+
+        item = {
+            "kind": kind if kind in {"file", "audio", "video"} else "file",
+            "name": name,
+            "mime_type": mime_type,
+            "size": max(0, size),
+        }
+        if text_excerpt:
+            item["text_excerpt"] = text_excerpt
+        if data_url and len(data_url) <= MAX_ATTACHMENT_DATA_URL_LENGTH and data_url.startswith("data:"):
+            item["data_url"] = data_url
+        clean.append(item)
+    return clean
+
+
+def build_attachment_context(attachments: list[dict]) -> str:
+    if not attachments:
+        return ""
+    parts = []
+    for item in attachments[:MAX_ATTACHMENTS]:
+        name = item.get("name", "file")
+        kind = item.get("kind", "file")
+        mime_type = item.get("mime_type", "")
+        if item.get("text_excerpt"):
+            parts.append(f"[Вложение: {name} | {mime_type or kind}]\n{item['text_excerpt']}")
+        else:
+            parts.append(f"[Вложение: {name} | {mime_type or kind}]")
+    return "\n\n".join(parts)
+
+
 def serialize_user(user: dict, username: str, profile: dict, daily_bonus_awarded: bool = False) -> dict:
     return {
         "username": username,
@@ -1415,6 +1462,7 @@ def openai_generate_reply(message: str, history: list[tuple[str, str]], profile:
                         "Ты дружелюбный русскоязычный ассистент для обычного чата. "
                         "Отвечай естественно, как современный умный чат-бот: по делу, понятно, без шаблонной воды. "
                         "Если вопрос простой, отвечай коротко. Если вопрос сложный, объясняй ясно и человечески. "
+                        "Если пользователь просит код, давай рабочий пример кода в markdown-блоках. "
                         "Не выдумывай факты. Если не уверен, скажи об этом прямо. "
                         "Не упоминай, что тебя попросили следовать инструкциям."
                     ),
@@ -1569,6 +1617,111 @@ class SmartChatBot:
             )
 
         return None
+
+    def _code_reply(self, message: str) -> str | None:
+        normalized = normalize(message)
+        if not any(word in normalized for word in ("код", "python", "js", "javascript", "html", "css", "flask", "fastapi", "telegram bot", "бот")):
+            return None
+
+        if "telegram" in normalized and "python" in normalized:
+            return (
+                "Вот базовый пример Telegram-бота на Python:\n\n"
+                "```python\n"
+                "from telegram import Update\n"
+                "from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes\n\n"
+                "TOKEN = \"YOUR_TOKEN\"\n\n"
+                "async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):\n"
+                "    await update.message.reply_text(\"Привет! Бот запущен.\")\n\n"
+                "app = ApplicationBuilder().token(TOKEN).build()\n"
+                "app.add_handler(CommandHandler(\"start\", start))\n"
+                "app.run_polling()\n"
+                "```\n\n"
+                "Если хочешь, я могу дальше сразу сгенерировать версию с кнопками, меню или базой данных."
+            )
+
+        if "fastapi" in normalized:
+            return (
+                "Вот минимальный API на FastAPI:\n\n"
+                "```python\n"
+                "from fastapi import FastAPI\n\n"
+                "app = FastAPI()\n\n"
+                "@app.get(\"/\")\n"
+                "def read_root():\n"
+                "    return {\"ok\": True, \"message\": \"Hello from FastAPI\"}\n"
+                "```\n\n"
+                "Запуск:\n"
+                "```bash\n"
+                "uvicorn main:app --reload\n"
+                "```"
+            )
+
+        if "flask" in normalized:
+            return (
+                "Вот минимальный сервер на Flask:\n\n"
+                "```python\n"
+                "from flask import Flask\n\n"
+                "app = Flask(__name__)\n\n"
+                "@app.route(\"/\")\n"
+                "def home():\n"
+                "    return {\"ok\": True, \"message\": \"Hello from Flask\"}\n\n"
+                "if __name__ == \"__main__\":\n"
+                "    app.run(debug=True)\n"
+                "```"
+            )
+
+        if "html" in normalized and "css" in normalized:
+            return (
+                "Вот простой шаблон HTML + CSS:\n\n"
+                "```html\n"
+                "<!doctype html>\n"
+                "<html lang=\"ru\">\n"
+                "<head>\n"
+                "  <meta charset=\"utf-8\" />\n"
+                "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n"
+                "  <title>Demo</title>\n"
+                "  <style>\n"
+                "    body { font-family: sans-serif; background: #f5f1ff; padding: 40px; }\n"
+                "    .card { max-width: 420px; background: white; border-radius: 20px; padding: 24px; }\n"
+                "  </style>\n"
+                "</head>\n"
+                "<body>\n"
+                "  <div class=\"card\">\n"
+                "    <h1>Привет</h1>\n"
+                "    <p>Это базовая страница.</p>\n"
+                "  </div>\n"
+                "</body>\n"
+                "</html>\n"
+                "```"
+            )
+
+        if "javascript" in normalized or " js " in f" {normalized} ":
+            return (
+                "Вот простой пример запроса на JavaScript:\n\n"
+                "```javascript\n"
+                "async function loadData() {\n"
+                "  const response = await fetch('/api/data');\n"
+                "  const data = await response.json();\n"
+                "  console.log(data);\n"
+                "}\n\n"
+                "loadData();\n"
+                "```"
+            )
+
+        if "python" in normalized:
+            return (
+                "Вот минимальный пример на Python:\n\n"
+                "```python\n"
+                "def main():\n"
+                "    print(\"Привет из Python\")\n\n"
+                "if __name__ == \"__main__\":\n"
+                "    main()\n"
+                "```"
+            )
+
+        return (
+            "Могу сгенерировать код. Напиши, что именно нужно: язык, задачу и формат результата.\n\n"
+            "Пример: `сделай telegram бота на python`, `напиши api на fastapi`, `сделай html страницу`."
+        )
 
     def _personal_reply(self, message: str) -> str | None:
         normalized = normalize(message)
@@ -1995,6 +2148,12 @@ class SmartChatBot:
             self.history = self.history[-8:]
             return direct
 
+        code_answer = self._code_reply(cleaned)
+        if code_answer:
+            self.history.append((cleaned, code_answer))
+            self.history = self.history[-8:]
+            return code_answer
+
         personal = self._personal_reply(cleaned)
         if personal:
             self.history.append((cleaned, personal))
@@ -2272,6 +2431,8 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 return self._send_file(web_dir / "admin.css", "text/css; charset=utf-8")
             if request_path == "/sw.js":
                 return self._send_file(web_dir / "sw.js", "application/javascript; charset=utf-8")
+            if request_path == "/privacy":
+                return self._send_file(web_dir / "privacy.html", "text/html; charset=utf-8")
             if request_path == "/api/health":
                 return self._send_json({"ok": True, "storage": storage_mode(), "database_error": DATABASE_RUNTIME_ERROR})
             if request_path == "/api/me":
@@ -2312,10 +2473,6 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 for username, user in sorted(users.items()):
                     ensure_user_record(username, users)
                     user_chat = chats.get(username, [])
-                    recent_chat = [
-                        {"chat_index": index, "role": item.get("role", "bot"), "text": item.get("text", "")}
-                        for index, item in enumerate(user_chat)
-                    ][-12:]
                     payload.append(
                         {
                             "username": username,
@@ -2327,7 +2484,6 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                             "searches_used": user.get("stats", {}).get("searches_used", 0),
                             "chat_messages": len(user_chat),
                             "credit_history": user.get("credit_history", [])[:8],
-                            "recent_chat": recent_chat,
                         }
                     )
                 return self._send_json({"users": payload})
@@ -2630,27 +2786,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 return self._send_json({"ok": True})
 
             if self.path == "/api/admin/edit-message":
-                if not self._require_admin():
-                    return
-                payload = self._read_json()
-                if payload is None:
-                    return self._send_json({"error": "Invalid JSON"}, status=400)
-                username = str(payload.get("username", "")).strip()
-                text = str(payload.get("text", "")).strip()
-                chat_index = payload.get("chat_index")
-                if not username or not text or not isinstance(chat_index, int):
-                    return self._send_json({"error": "Нужны логин, индекс и новый текст."}, status=400)
-                users = self._load_users()
-                if username not in users:
-                    return self._send_json({"error": "Пользователь не найден."}, status=404)
-                chats = self._load_chats()
-                user_chat = chats.get(username, [])
-                if chat_index < 0 or chat_index >= len(user_chat):
-                    return self._send_json({"error": "Сообщение не найдено."}, status=404)
-                user_chat[chat_index]["text"] = text
-                chats[username] = user_chat
-                self._save_chats(chats)
-                return self._send_json({"ok": True})
+                return self._send_json({"error": "Просмотр и изменение личных чатов отключены."}, status=403)
 
             if self.path == "/api/admin/global-chat/edit-message":
                 if not self._require_admin():
@@ -2672,26 +2808,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 return self._send_json({"ok": True})
 
             if self.path == "/api/admin/delete-message":
-                if not self._require_admin():
-                    return
-                payload = self._read_json()
-                if payload is None:
-                    return self._send_json({"error": "Invalid JSON"}, status=400)
-                username = str(payload.get("username", "")).strip()
-                chat_index = payload.get("chat_index")
-                if not username or not isinstance(chat_index, int):
-                    return self._send_json({"error": "Нужны логин и индекс сообщения."}, status=400)
-                users = self._load_users()
-                if username not in users:
-                    return self._send_json({"error": "Пользователь не найден."}, status=404)
-                chats = self._load_chats()
-                user_chat = chats.get(username, [])
-                if chat_index < 0 or chat_index >= len(user_chat):
-                    return self._send_json({"error": "Сообщение не найдено."}, status=404)
-                user_chat.pop(chat_index)
-                chats[username] = user_chat
-                self._save_chats(chats)
-                return self._send_json({"ok": True})
+                return self._send_json({"error": "Просмотр и изменение личных чатов отключены."}, status=403)
 
             if self.path == "/api/admin/global-chat/delete-message":
                 if not self._require_admin():
@@ -2791,8 +2908,11 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     return self._send_json({"error": "Invalid JSON"}, status=400)
 
                 message = str(payload.get("message", "")).strip()
+                attachments = sanitize_attachments(payload.get("attachments", []))
                 if not message:
-                    return self._send_json({"error": "Empty message"}, status=400)
+                    if not attachments:
+                        return self._send_json({"error": "Empty message"}, status=400)
+                    message = "(без текста)"
 
                 username = current["username"]
                 users = self._load_users()
@@ -2802,7 +2922,9 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 user["daily_stats"]["messages_sent"] = user["daily_stats"].get("messages_sent", 0) + 1
 
                 chats = self._load_chats()
-                chats.setdefault(GLOBAL_CHAT_KEY, []).append({"role": "user", "text": message, "author": username})
+                chats.setdefault(GLOBAL_CHAT_KEY, []).append(
+                    {"role": "user", "text": message, "author": username, "attachments": attachments}
+                )
                 chats[GLOBAL_CHAT_KEY] = chats[GLOBAL_CHAT_KEY][-200:]
                 if notify_global_chat_users(users, username, username, message):
                     self._save_users(users)
@@ -2823,8 +2945,11 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 return self._send_json({"error": "Invalid JSON"}, status=400)
 
             message = str(payload.get("message", "")).strip()
+            attachments = sanitize_attachments(payload.get("attachments", []))
             if not message:
-                return self._send_json({"error": "Empty message"}, status=400)
+                if not attachments:
+                    return self._send_json({"error": "Empty message"}, status=400)
+                message = "(без текста)"
 
             username = current["username"]
             users = self._load_users()
@@ -2832,8 +2957,13 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
             if user.get("credits", DEFAULT_CREDITS) < MESSAGE_COST:
                 return self._send_json({"error": "Кредиты закончились. Выполни задания или пригласи друга."}, status=402)
 
+            bot_input = message
+            attachment_context = build_attachment_context(attachments)
+            if attachment_context:
+                bot_input = f"{message}\n\nКонтекст вложений:\n{attachment_context}".strip()
+
             try:
-                answer = bot.reply(message)
+                answer = bot.reply(bot_input)
             except Exception:
                 answer = "Я не смог нормально обработать это сообщение, но давай попробуем ещё раз чуть проще или конкретнее."
             user["credits"] -= MESSAGE_COST
@@ -2845,7 +2975,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
             chats = self._load_chats()
             chats.setdefault(username, []).extend(
                 [
-                    {"role": "user", "text": message},
+                    {"role": "user", "text": message, "attachments": attachments},
                     {"role": "bot", "text": answer},
                 ]
             )

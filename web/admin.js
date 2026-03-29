@@ -280,69 +280,7 @@ function selectUser(username) {
     : "Активен";
   selectedUserMeta.textContent = `${statusText} · ${user.credits} кр. · Сообщений: ${user.messages_sent}`;
   selectedChat.innerHTML = "";
-
-  const recent = user.recent_chat || [];
-  if (!recent.length) {
-    selectedChat.innerHTML = `<div class="muted">Чат пока пустой</div>`;
-    return;
-  }
-
-  for (const item of recent) {
-    const line = document.createElement("div");
-    line.className = `chat-line ${item.role}`;
-    const text = document.createElement("div");
-    text.className = "chat-line-text";
-    text.textContent = `${item.role === "user" ? "User" : "Bot"}: ${item.text}`;
-
-    const actions = document.createElement("div");
-    actions.className = "chat-line-actions";
-
-    const editButton = document.createElement("button");
-    editButton.type = "button";
-    editButton.className = "chat-action-button";
-    editButton.textContent = "Изменить";
-    editButton.addEventListener("click", async (event) => {
-      event.stopPropagation();
-      const nextText = window.prompt("Новый текст сообщения", item.text);
-      if (nextText === null) return;
-      const trimmed = nextText.trim();
-      if (!trimmed) return;
-      try {
-        await request("/api/admin/edit-message", {
-          username: activeUsername,
-          chat_index: item.chat_index,
-          text: trimmed,
-        });
-        await loadUsers();
-      } catch (error) {
-        operatorError.textContent = error.message;
-      }
-    });
-
-    const deleteButton = document.createElement("button");
-    deleteButton.type = "button";
-    deleteButton.className = "chat-action-button ghost";
-    deleteButton.textContent = "Удалить";
-    deleteButton.addEventListener("click", async (event) => {
-      event.stopPropagation();
-      if (!window.confirm("Удалить это сообщение из чата?")) {
-        return;
-      }
-      try {
-        await request("/api/admin/delete-message", {
-          username: activeUsername,
-          chat_index: item.chat_index,
-        });
-        await loadUsers();
-      } catch (error) {
-        operatorError.textContent = error.message;
-      }
-    });
-
-    actions.append(editButton, deleteButton);
-    line.append(text, actions);
-    selectedChat.appendChild(line);
-  }
+  selectedChat.innerHTML = `<div class="muted">Личные чаты пользователей скрыты. Здесь доступна только поддержка без просмотра истории.</div>`;
 }
 
 async function openGlobalChatPanel() {
