@@ -1654,6 +1654,10 @@ class SmartChatBot:
         bot_markers = ("ты ", "ты?", "тебя", "тебе", "о тебе", "твой", "твоя", "сам", "бот")
         return any(marker in normalized for marker in bot_markers)
 
+    def _force_generation_request(self, message: str) -> bool:
+        normalized = normalize(message)
+        return any(word in normalized for word in ("код", "сделай", "сгенерируй", "генерируй"))
+
     def _looks_like_prompt_injection(self, message: str) -> bool:
         lowered = message.lower().replace("ё", "е")
         markers = (
@@ -2031,10 +2035,7 @@ class SmartChatBot:
                 "```"
             )
 
-        return (
-            "Могу сгенерировать код. Напиши, что именно нужно: язык, задачу и формат результата.\n\n"
-            "Пример: `сделай telegram бота на python`, `напиши api на fastapi`, `сделай html страницу`."
-        )
+        return None
 
     def _personal_reply(self, message: str) -> str | None:
         normalized = normalize(message)
@@ -2483,6 +2484,7 @@ class SmartChatBot:
         if not cleaned:
             return "Напиши вопрос или тему, и я отвечу."
         self._extract_user_facts(cleaned)
+        matches: list[tuple[float, dict]] | None = None
 
         implicit_query = self._extract_search_followup(cleaned)
         if implicit_query:
@@ -2518,6 +2520,19 @@ class SmartChatBot:
             self.history.append((cleaned, injection_like))
             self.history = self.history[-8:]
             return injection_like
+
+        if self._force_generation_request(cleaned):
+            code_answer = self._code_reply(cleaned)
+            if code_answer:
+                self.history.append((cleaned, code_answer))
+                self.history = self.history[-8:]
+                return code_answer
+
+            matches = self._best_matches(cleaned)
+            answer = self._local_general_answer(cleaned, matches)
+            self.history.append((cleaned, answer))
+            self.history = self.history[-8:]
+            return answer
 
         code_answer = self._code_reply(cleaned)
         if code_answer:
@@ -2569,7 +2584,8 @@ class SmartChatBot:
             self.history = self.history[-8:]
             return creative
 
-        matches = self._best_matches(cleaned)
+        if matches is None:
+            matches = self._best_matches(cleaned)
         if not matches or matches[0][0] < MIN_SCORE:
             answer = self._local_general_answer(cleaned, matches)
             self.history.append((cleaned, answer))
