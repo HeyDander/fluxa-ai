@@ -89,6 +89,7 @@ class MiniGPT(nn.Module):
         self.blocks = nn.ModuleList(Block(config) for _ in range(config.n_layer))
         self.ln_f = nn.LayerNorm(config.n_embd)
         self.head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
+        self.head.weight = self.token_emb.weight
         self.apply(self._init_weights)
 
     def _init_weights(self, module: nn.Module) -> None:
@@ -98,6 +99,9 @@ class MiniGPT(nn.Module):
                 nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             nn.init.normal_(module.weight, mean=0.0, std=0.02)
+
+    def num_parameters(self) -> int:
+        return sum(parameter.numel() for parameter in self.parameters())
 
     def forward(self, idx: torch.Tensor, targets: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor | None]:
         bsz, seq_len = idx.shape
@@ -125,11 +129,16 @@ class MiniGPT(nn.Module):
         temperature: float = 0.9,
         top_k: int | None = 40,
         eos_token_id: int | None = None,
+        repetition_penalty: float = 1.05,
     ) -> torch.Tensor:
         for _ in range(max_new_tokens):
             idx_cond = idx[:, -self.config.block_size :]
             logits, _ = self(idx_cond)
             logits = logits[:, -1, :] / max(temperature, 1e-5)
+            if repetition_penalty > 1.0:
+                recent = idx_cond[:, -min(64, idx_cond.size(1)) :]
+                for token_id in torch.unique(recent):
+                    logits[:, token_id] /= repetition_penalty
             if top_k is not None:
                 values, _ = torch.topk(logits, min(top_k, logits.size(-1)))
                 logits[logits < values[:, [-1]]] = float("-inf")
@@ -139,4 +148,3 @@ class MiniGPT(nn.Module):
             if eos_token_id is not None and int(next_id.item()) == eos_token_id:
                 break
         return idx
-

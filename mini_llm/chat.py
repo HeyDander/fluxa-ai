@@ -47,6 +47,7 @@ def main() -> None:
             temperature=args.temperature,
             top_k=args.top_k,
             eos_token_id=tokenizer.eos_id,
+            repetition_penalty=1.08,
         )
         text = tokenizer.decode(output[0].tolist())
         answer = trim_answer(text[len(prompt) :]) if text.startswith(prompt) else trim_answer(text)
@@ -57,4 +58,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

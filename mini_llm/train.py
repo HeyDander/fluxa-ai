@@ -41,8 +41,12 @@ def main() -> None:
     parser.add_argument("--embd", type=int, default=384)
     parser.add_argument("--dropout", type=float, default=0.1)
     parser.add_argument("--lr", type=float, default=3e-4)
+    parser.add_argument("--min-lr", type=float, default=3e-5)
+    parser.add_argument("--warmup-steps", type=int, default=100)
     parser.add_argument("--eval-every", type=int, default=200)
     parser.add_argument("--save-every", type=int, default=500)
+    parser.add_argument("--grad-accum", type=int, default=1)
+    parser.add_argument("--resume", action="store_true")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
 
@@ -60,23 +64,55 @@ def main() -> None:
     )
     model = MiniGPT(config).to(args.device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
+    scaler = torch.cuda.amp.GradScaler(enabled=args.device.startswith("cuda"))
+    start_step = 0
 
     meta = {
         "config": asdict(config),
         "data_file": str(args.data),
         "device": args.device,
         "steps": args.steps,
+        "parameters": model.num_parameters(),
     }
     (args.out / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    checkpoint_path = args.out / "model.pt"
+    if args.resume and checkpoint_path.exists():
+        checkpoint = torch.load(checkpoint_path, map_location=args.device)
+        model.load_state_dict(checkpoint["model_state"])
+        optimizer.load_state_dict(checkpoint["optimizer_state"])
+        start_step = int(checkpoint.get("step", 0))
+        print(f"resumed from step {start_step}")
+
+    print(f"parameters: {model.num_parameters():,}")
+
     best_val = math.inf
-    for step in range(1, args.steps + 1):
-        x, y = random_batch(prepared.train_tokens, args.block_size, args.batch_size, args.device)
-        _, loss = model(x, y)
-        optimizer.zero_grad(set_to_none=True)
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        optimizer.step()
+    if checkpoint_path.exists() and args.resume:
+        best_val = float(torch.load(checkpoint_path, map_location="cpu").get("val_loss", math.inf))
+
+    optimizer.zero_grad(set_to_none=True)
+    for step in range(start_step + 1, args.steps + 1):
+        if step <= args.warmup_steps:
+            lr = args.lr * step / max(args.warmup_steps, 1)
+        else:
+            progress = (step - args.warmup_steps) / max(args.steps - args.warmup_steps, 1)
+            cosine = 0.5 * (1.0 + math.cos(math.pi * progress))
+            lr = args.min_lr + (args.lr - args.min_lr) * cosine
+        for group in optimizer.param_groups:
+            group["lr"] = lr
+
+        with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=args.device.startswith("cuda")):
+            x, y = random_batch(prepared.train_tokens, args.block_size, args.batch_size, args.device)
+            _, loss = model(x, y)
+            loss = loss / args.grad_accum
+
+        scaler.scale(loss).backward()
+        if step % args.grad_accum == 0:
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            scaler.step(optimizer)
+            scaler.update()
+            optimizer.zero_grad(set_to_none=True)
 
         if step == 1 or step % args.eval_every == 0 or step == args.steps:
             metrics = estimate_loss(
@@ -96,6 +132,7 @@ def main() -> None:
                 torch.save(
                     {
                         "model_state": model.state_dict(),
+                        "optimizer_state": optimizer.state_dict(),
                         "config": asdict(config),
                         "step": step,
                         "val_loss": best_val,
@@ -107,6 +144,7 @@ def main() -> None:
             torch.save(
                 {
                     "model_state": model.state_dict(),
+                    "optimizer_state": optimizer.state_dict(),
                     "config": asdict(config),
                     "step": step,
                 },
@@ -116,4 +154,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

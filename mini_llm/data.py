@@ -26,6 +26,8 @@ def build_corpus(seed_path: Path) -> str:
             continue
         chunks.append(f"<chat>\nuser: {user}\nassistant: {bot}\n</chat>\n")
         chunks.append(f"Вопрос: {user}\nОтвет: {bot}\n")
+        chunks.append(f"### instruction\n{user}\n### response\n{bot}\n")
+        chunks.append(f"Запрос: {user}\nРешение: {bot}\n")
 
     chunks.append(raw)
     return "\n".join(chunks)
@@ -78,4 +80,3 @@ def random_batch(tokens: torch.Tensor, block_size: int, batch_size: int, device:
     x = torch.stack([tokens[i : i + block_size] for i in indices]).to(device)
     y = torch.stack([tokens[i + 1 : i + block_size + 1] for i in indices]).to(device)
     return x, y
-
