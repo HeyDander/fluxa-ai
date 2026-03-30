@@ -360,6 +360,25 @@ LOCAL_KNOWLEDGE = {
     "кредит": "Кредиты — это внутренняя единица расхода или награды. Для них важны баланс, история начислений и чёткие правила списания.",
     "реферал": "Реферальная система обычно даёт пользователю код приглашения и бонусы за новых зарегистрировавшихся пользователей.",
     "уведомлен": "Уведомления бывают локальные, браузерные и push. Для хорошего UX важно давать понятное согласие и не спамить пользователя.",
+    "websocket": "WebSocket нужен для двусторонней связи в реальном времени: чат, события, статусы и живые обновления без постоянного ручного refresh.",
+    "sse": "SSE подходит для однонаправленных живых обновлений с сервера в браузер. Это проще WebSocket, если клиент только получает события.",
+    "docker": "Docker упаковывает приложение и его окружение в контейнер. Это помогает одинаково запускать проект локально и на сервере.",
+    "railway": "Railway удобен для быстрого деплоя: подключаешь репозиторий, задаёшь переменные окружения и сервис поднимается как отдельное приложение.",
+    "vite": "Vite — это быстрый dev server и сборщик фронтенда. Его часто используют для React, Vue и обычных фронтенд-проектов.",
+    "node": "Node.js запускает JavaScript вне браузера. На нём часто делают серверы, боты, инструменты сборки и realtime-приложения.",
+    "react": "React — это библиотека для интерфейсов. Она разбивает экран на компоненты и обновляет UI при изменении состояния.",
+    "next": "Next.js — это React-фреймворк с маршрутизацией, SSR, API routes и удобным продакшн-режимом для сайтов и приложений.",
+    "jwt": "JWT — это токен для авторизации. Его удобно использовать для API, но важно хранить и обновлять его аккуратно.",
+    "cookie": "Cookie часто используют для сессий: сервер создаёт идентификатор сессии, а браузер отправляет его обратно на следующих запросах.",
+    "session": "Сессия помогает хранить состояние авторизованного пользователя между запросами без повторного логина.",
+    "хеш": "Хеширование паролей нужно, чтобы не хранить пароль в открытом виде. Обычно используют соль и алгоритмы вроде bcrypt или argon2.",
+    "магазин": "Интернет-магазин обычно строится вокруг каталога, карточек товара, корзины, оформления заказа и панели управления товарами.",
+    "лендинг": "Лендинг — это одна страница с чётким оффером, сильным первым экраном, блоками доверия, преимуществами и призывом к действию.",
+    "дашборд": "Дашборд показывает ключевые метрики и действия пользователя на одном экране: графики, карточки, таблицы и фильтры.",
+    "профиль": "Профиль пользователя обычно содержит имя, аватар, описание, настройки, безопасность аккаунта и историю активности.",
+    "поиск": "Поиск состоит из поля ввода, индекса данных, фильтрации, сортировки результатов и удобного отображения совпадений.",
+    "рулетк": "Чат-рулетка требует очереди ожидания, пары собеседников, переключения на следующего, анонимности и защиты от спама.",
+    "магазин": "Магазин лучше проектировать вокруг каталога, карточек, цены, корзины и понятного checkout без лишних шагов.",
 }
 
 JOKE_TEMPLATES = [
@@ -1756,7 +1775,13 @@ class SmartChatBot:
 
     def _force_generation_request(self, message: str) -> bool:
         normalized = normalize(message)
-        return any(word in normalized for word in ("код", "сделай", "сгенерируй", "генерируй"))
+        return any(
+            word in normalized
+            for word in (
+                "код", "сделай", "сгенерируй", "генерируй", "создай", "напиши",
+                "добавь", "реализуй", "нужен", "нужна", "нужно"
+            )
+        )
 
     def _looks_like_prompt_injection(self, message: str) -> bool:
         lowered = message.lower().replace("ё", "е")
@@ -1926,15 +1951,15 @@ class SmartChatBot:
         if question_type == "definition":
             answer = f"{topic.capitalize()} обычно понимают так: {support}"
         elif question_type == "how_to":
-            answer = f"Если делать это без лишней сложности, начни с самого простого рабочего шага. По сути: {support}"
+            answer = f"Начни с минимального рабочего шага. Дальше логика такая: {support}"
         elif question_type == "why":
-            answer = f"Обычно это происходит из-за сочетания нескольких причин. Самая практичная мысль тут такая: {support}"
+            answer = f"Обычно тут работает сочетание нескольких причин. Главное: {support}"
         elif question_type == "can":
-            answer = f"Да, обычно это можно сделать. Лучший старт тут такой: {support}"
+            answer = f"Да, это можно сделать. Стартовый ход: {support}"
         elif question_type == "request":
-            answer = f"Это можно сделать. Я бы начал с минимальной рабочей версии, а дальше уже наращивал детали. По сути: {support}"
+            answer = f"Это делается так: {support}"
         else:
-            answer = f"Если отвечать коротко и по делу, я бы сказал так: {support}"
+            answer = f"{support}"
 
         answer = re.sub(r"\s+", " ", answer).strip()
         if not answer.endswith((".", "!", "?")):
@@ -2481,6 +2506,170 @@ class SmartChatBot:
 </body>
 </html>"""
 
+    def _generate_profile_html(self, message: str) -> str:
+        title = self._escape_html(self._title_case_topic(self._extract_topic_phrase(message) or "Профиль"))
+        accent = self._random_bright_color()
+        accent2 = self._random_bright_color({accent})
+        return f"""<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title}</title>
+  <style>
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, {accent}, {accent2});
+      color: #f8fafc;
+      padding: 24px;
+    }}
+    .wrap {{ width: min(1100px, 100%); margin: 0 auto; display: grid; grid-template-columns: 340px 1fr; gap: 18px; }}
+    .card {{ border-radius: 24px; padding: 22px; background: rgba(15,23,42,0.76); border: 1px solid rgba(255,255,255,0.1); }}
+    .avatar {{ width: 110px; height: 110px; border-radius: 28px; background: rgba(255,255,255,0.16); margin-bottom: 16px; }}
+    .stats {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }}
+    .stat {{ padding: 14px; border-radius: 18px; background: rgba(255,255,255,0.06); }}
+    .feed {{ display: grid; gap: 14px; margin-top: 18px; }}
+    .post {{ padding: 18px; border-radius: 20px; background: rgba(255,255,255,0.06); }}
+    @media (max-width: 860px) {{ .wrap {{ grid-template-columns: 1fr; }} }}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="card">
+      <div class="avatar"></div>
+      <h1>{title}</h1>
+      <p>Страница профиля с аватаром, описанием, статистикой, настройками и быстрыми действиями пользователя.</p>
+      <div class="stats">
+        <div class="stat"><strong>1.2k</strong><br/>Подписчики</div>
+        <div class="stat"><strong>84</strong><br/>Посты</div>
+        <div class="stat"><strong>17</strong><br/>Достижения</div>
+      </div>
+    </section>
+    <section class="card">
+      <h2>Активность</h2>
+      <div class="feed">
+        <article class="post">История действий пользователя, последние изменения профиля и сохранённые элементы.</article>
+        <article class="post">Блок настроек безопасности, уведомлений и персональных параметров аккаунта.</article>
+        <article class="post">Галерея, вкладки с контентом и быстрый доступ к приватным данным.</article>
+      </div>
+    </section>
+  </main>
+</body>
+</html>"""
+
+    def _generate_landing_html(self, message: str) -> str:
+        title = self._escape_html(self._title_case_topic(self._extract_topic_phrase(message) or "Лендинг"))
+        accent = self._random_bright_color()
+        return f"""<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title}</title>
+  <style>
+    * {{ box-sizing: border-box; }}
+    body {{ margin: 0; font-family: Arial, sans-serif; background: #0b1020; color: #f8fafc; }}
+    .hero {{ padding: 96px 24px 56px; background: radial-gradient(circle at top, {accent}, transparent 28%), #0b1020; text-align: center; }}
+    h1 {{ font-size: clamp(42px, 8vw, 92px); margin: 0; }}
+    .lead {{ max-width: 760px; margin: 18px auto 0; line-height: 1.6; color: rgba(255,255,255,0.82); }}
+    .cta {{ margin-top: 24px; display: inline-block; padding: 16px 22px; border-radius: 999px; background: {accent}; color: #091018; text-decoration: none; font-weight: 700; }}
+    .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; width: min(1100px, calc(100% - 32px)); margin: 0 auto 60px; }}
+    .card {{ padding: 22px; border-radius: 22px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); }}
+  </style>
+</head>
+<body>
+  <section class="hero">
+    <h1>{title}</h1>
+    <p class="lead">Одностраничный продающий экран с сильным оффером, понятными преимуществами, блоком доверия и заметным призывом к действию.</p>
+    <a class="cta" href="#">Запустить</a>
+  </section>
+  <section class="grid">
+    <article class="card"><h2>Оффер</h2><p>Первый экран должен за секунды объяснять, зачем человеку нужен продукт и почему он лучше альтернатив.</p></article>
+    <article class="card"><h2>Преимущества</h2><p>Три-четыре сильных аргумента без воды: скорость, удобство, цена, автоматизация или рост результата.</p></article>
+    <article class="card"><h2>Доверие</h2><p>Отзывы, цифры, кейсы, бренды клиентов или короткие реальные факты, которые убирают сомнение.</p></article>
+    <article class="card"><h2>CTA</h2><p>Чёткий финальный призыв без лишних ссылок и отвлечений, чтобы пользователь дошёл до заявки.</p></article>
+  </section>
+</body>
+</html>"""
+
+    def _generate_shop_html(self, message: str) -> str:
+        title = self._escape_html(self._title_case_topic(self._extract_topic_phrase(message) or "Магазин"))
+        accent = self._random_bright_color()
+        return f"""<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title}</title>
+  <style>
+    * {{ box-sizing: border-box; }}
+    body {{ margin: 0; font-family: Arial, sans-serif; background: #f7f8fc; color: #121826; }}
+    header {{ padding: 22px 24px; background: #fff; border-bottom: 1px solid rgba(0,0,0,0.08); display: flex; justify-content: space-between; align-items: center; }}
+    .badge {{ padding: 10px 14px; border-radius: 999px; background: {accent}; color: #0a0e18; font-weight: 700; }}
+    .layout {{ width: min(1160px, calc(100% - 32px)); margin: 24px auto; display: grid; grid-template-columns: 280px 1fr; gap: 18px; }}
+    aside, .catalog {{ background: #fff; border-radius: 24px; padding: 20px; box-shadow: 0 12px 32px rgba(15,23,42,0.08); }}
+    .products {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }}
+    .product {{ padding: 18px; border-radius: 20px; background: #f8fafc; border: 1px solid rgba(0,0,0,0.06); }}
+    @media (max-width: 860px) {{ .layout {{ grid-template-columns: 1fr; }} }}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>{title}</h1>
+    <div class="badge">Корзина · 3</div>
+  </header>
+  <main class="layout">
+    <aside>
+      <h2>Фильтры</h2>
+      <p>Категории, цена, наличие, бренд и сортировка, чтобы пользователь быстро дошёл до нужного товара.</p>
+    </aside>
+    <section class="catalog">
+      <div class="products">
+        <article class="product"><h3>Товар 1</h3><p>Карточка товара с фото, ценой, рейтингом и кнопкой добавления в корзину.</p></article>
+        <article class="product"><h3>Товар 2</h3><p>Варианты, остатки, промо и короткое описание, чтобы решение принималось без лишнего клика.</p></article>
+        <article class="product"><h3>Товар 3</h3><p>Блок рекомендаций, скидок и upsell-элементов для роста среднего чека.</p></article>
+      </div>
+    </section>
+  </main>
+</body>
+</html>"""
+
+    def _generate_dashboard_html(self, message: str) -> str:
+        title = self._escape_html(self._title_case_topic(self._extract_topic_phrase(message) or "Дашборд"))
+        accent = self._random_bright_color()
+        return f"""<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title}</title>
+  <style>
+    * {{ box-sizing: border-box; }}
+    body {{ margin: 0; font-family: Arial, sans-serif; background: #0f172a; color: #eef2ff; }}
+    .wrap {{ width: min(1180px, calc(100% - 32px)); margin: 24px auto; display: grid; gap: 18px; }}
+    .top {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }}
+    .card {{ padding: 20px; border-radius: 22px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); }}
+    .value {{ font-size: 34px; font-weight: 800; color: {accent}; }}
+    .big {{ min-height: 320px; }}
+    @media (max-width: 900px) {{ .top {{ grid-template-columns: repeat(2, 1fr); }} }}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="top">
+      <article class="card"><div class="value">42k</div><p>Активные пользователи</p></article>
+      <article class="card"><div class="value">18%</div><p>Конверсия</p></article>
+      <article class="card"><div class="value">7m</div><p>Средний чек</p></article>
+      <article class="card"><div class="value">99.9%</div><p>Аптайм</p></article>
+    </section>
+    <section class="card big"><h2>{title}</h2><p>Экран с метриками, фильтрами, графиками, таблицами и событиями, чтобы пользователь быстро видел состояние продукта.</p></section>
+  </main>
+</body>
+</html>"""
+
     def _generate_api_code(self, message: str) -> str:
         slug = re.sub(r"[^a-z0-9]+", "_", normalize(self._extract_topic_phrase(message)))[:24].strip("_") or "items"
         return f"""from fastapi import FastAPI
@@ -2562,6 +2751,14 @@ if cleaned == "/memory":
         normalized = normalize(message)
         if any(word in normalized for word in ("логин", "регистрац", "авторизац")):
             return self._generate_auth_html(message)
+        if "профил" in normalized:
+            return self._generate_profile_html(message)
+        if any(word in normalized for word in ("лендинг", "landing")):
+            return self._generate_landing_html(message)
+        if any(word in normalized for word in ("магазин", "shop", "каталог", "товар")):
+            return self._generate_shop_html(message)
+        if any(word in normalized for word in ("дашборд", "dashboard", "аналитик", "метрик")):
+            return self._generate_dashboard_html(message)
         if "админ" in normalized:
             return self._generate_admin_html(message)
         if "чат" in normalized:
@@ -2590,7 +2787,9 @@ if cleaned == "/memory":
             "код", "python", "js", "javascript", "html", "css", "flask", "fastapi",
             "telegram bot", "бот", "функц", "команд", "api", "файл", "user_memory", "/memory",
             "сгенерируй", "генерируй", "страниц", "сайт", "чат", "логин", "регистрац",
-            "авторизац", "админ", "панел", "memory"
+            "авторизац", "админ", "панел", "memory", "профил", "лендинг", "магазин",
+            "каталог", "товар", "дашборд", "dashboard", "shop", "landing", "уведомлен",
+            "рулетк", "поиск"
         )
         if not any(word in normalized for word in coding_markers):
             return None
