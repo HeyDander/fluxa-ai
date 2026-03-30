@@ -1076,8 +1076,10 @@ def send_push_notification(subscription: dict, payload: dict) -> tuple[bool, boo
         return False, False
 
 
-def notify_global_chat_users(users: dict, sender_username: str | None, author: str, text: str) -> bool:
+def notify_global_chat_users(users: dict, sender_username: str | None, author: str, text: str, event_type: str = "chat") -> bool:
     if not push_enabled():
+        return False
+    if event_type != "system":
         return False
 
     changed = False
@@ -2975,54 +2977,36 @@ CREATE TABLE messages (
 
     def _generate_api_code(self, message: str) -> str:
         slug = re.sub(r"[^a-z0-9]+", "_", normalize(self._extract_topic_phrase(message)))[:24].strip("_") or "items"
-        return f"""from fastapi import FastAPI
-from pydantic import BaseModel
-
-app = FastAPI()
+        model_name = slug.title().replace('_', '')
+        return f"""from aiohttp import web
 
 
-class {slug.title().replace('_', '')}Payload(BaseModel):
-    name: str
-    description: str | None = None
+async def health(request: web.Request) -> web.Response:
+    return web.json_response({{"ok": True}})
 
 
-@app.get("/health")
-def health():
-    return {{"ok": True}}
-
-
-@app.post("/{slug}")
-def create_{slug}(payload: {slug.title().replace('_', '')}Payload):
-    return {{
-        "ok": True,
-        "item": payload.model_dump(),
+async def create_{slug}(request: web.Request) -> web.Response:
+    payload = await request.json()
+    item = {{
+        "name": payload.get("name", ""),
+        "description": payload.get("description", ""),
     }}
-"""
-
-    def _generate_telegram_bot_code(self, message: str) -> str:
-        return """from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+    return web.json_response({{"ok": True, "item": item}})
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Привет. Бот запущен.")
-
-
-async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text or ""
-    await update.message.reply_text(f"Ты написал: {text}")
-
-
-def main():
-    app = ApplicationBuilder().token("PUT_TOKEN_HERE").build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
-    app.run_polling()
+def build_app() -> web.Application:
+    app = web.Application()
+    app.router.add_get("/health", health)
+    app.router.add_post("/{slug}", create_{slug})
+    return app
 
 
 if __name__ == "__main__":
-    main()
+    web.run_app(build_app(), host="0.0.0.0", port=8080)
 """
+
+    def _generate_telegram_bot_code(self, message: str) -> str:
+        return Path("bot.py").read_text(encoding="utf-8") if Path("bot.py").exists() else ""
 
     def _generate_memory_patch_code(self, message: str) -> str:
         return """MEMORY_FILE = MODEL_DIR / "user_memory.txt"
@@ -4229,7 +4213,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 )
                 chats[GLOBAL_CHAT_KEY] = chats[GLOBAL_CHAT_KEY][-200:]
                 users = self._load_users()
-                if notify_global_chat_users(users, None, "fluxa-ai support", text):
+                if notify_global_chat_users(users, None, "fluxa-ai support", text, event_type="system"):
                     self._save_users(users)
                 self._save_chats(chats)
                 return self._send_json({"ok": True})
@@ -4375,7 +4359,7 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     {"role": "user", "text": message, "author": username, "attachments": attachments}
                 )
                 chats[GLOBAL_CHAT_KEY] = chats[GLOBAL_CHAT_KEY][-200:]
-                if notify_global_chat_users(users, username, username, message):
+                if notify_global_chat_users(users, username, username, message, event_type="chat"):
                     self._save_users(users)
                 self._save_users(users)
                 self._save_chats(chats)
