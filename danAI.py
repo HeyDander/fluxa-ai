@@ -2670,6 +2670,192 @@ class SmartChatBot:
 </body>
 </html>"""
 
+    def _generate_blog_html(self, message: str) -> str:
+        title = self._escape_html(self._title_case_topic(self._extract_topic_phrase(message) or "Блог"))
+        accent = self._random_bright_color()
+        return f"""<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title}</title>
+  <style>
+    * {{ box-sizing: border-box; }}
+    body {{ margin: 0; font-family: Georgia, serif; background: #faf7f2; color: #1f2937; }}
+    .wrap {{ width: min(1100px, calc(100% - 32px)); margin: 24px auto 64px; }}
+    .hero {{ padding: 40px; border-radius: 28px; background: linear-gradient(135deg, {accent}, #fff); }}
+    .grid {{ margin-top: 22px; display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 18px; }}
+    .post, .sidebar {{ background: #fff; border-radius: 24px; padding: 22px; box-shadow: 0 14px 34px rgba(15,23,42,0.08); }}
+    .list {{ display: grid; gap: 14px; }}
+    @media (max-width: 860px) {{ .grid {{ grid-template-columns: 1fr; }} }}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <h1>{title}</h1>
+      <p>Макет блога с hero-секцией, свежими статьями, подборками, тегами и правой колонкой для навигации и популярных материалов.</p>
+    </section>
+    <section class="grid">
+      <article class="post">
+        <h2>Последняя статья</h2>
+        <p>Основной контент, дата публикации, крупный заголовок и читабельная текстовая колонка без визуального мусора.</p>
+      </article>
+      <aside class="sidebar">
+        <div class="list">
+          <div>Популярное</div>
+          <div>Категории</div>
+          <div>Подписка</div>
+          <div>Архив</div>
+        </div>
+      </aside>
+    </section>
+  </main>
+</body>
+</html>"""
+
+    def _generate_forum_html(self, message: str) -> str:
+        title = self._escape_html(self._title_case_topic(self._extract_topic_phrase(message) or "Форум"))
+        accent = self._random_bright_color()
+        return f"""<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title}</title>
+  <style>
+    * {{ box-sizing: border-box; }}
+    body {{ margin: 0; font-family: Arial, sans-serif; background: #0b1220; color: #e5eefc; }}
+    .wrap {{ width: min(1160px, calc(100% - 32px)); margin: 24px auto; display: grid; gap: 18px; }}
+    .top {{ display: flex; justify-content: space-between; align-items: center; padding: 22px; border-radius: 24px; background: rgba(255,255,255,0.05); }}
+    .board {{ display: grid; gap: 14px; }}
+    .thread {{ padding: 20px; border-radius: 20px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); }}
+    .tag {{ display: inline-block; padding: 8px 12px; border-radius: 999px; background: {accent}; color: #081018; font-weight: 700; }}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="top">
+      <div>
+        <h1>{title}</h1>
+        <p>Форум с разделами, тредами, закреплёнными обсуждениями и быстрым созданием новой темы.</p>
+      </div>
+      <span class="tag">Новая тема</span>
+    </section>
+    <section class="board">
+      <article class="thread"><h2>Общие обсуждения</h2><p>Раздел для вопросов, новостей и быстрых тем по сообществу.</p></article>
+      <article class="thread"><h2>Помощь</h2><p>Блок с ответами, решениями проблем и поиском по уже существующим обсуждениям.</p></article>
+      <article class="thread"><h2>Проекты</h2><p>Категория для демонстрации работ, фидбека и новых релизов.</p></article>
+    </section>
+  </main>
+</body>
+</html>"""
+
+    def _generate_todo_html(self, message: str) -> str:
+        title = self._escape_html(self._title_case_topic(self._extract_topic_phrase(message) or "Todo App"))
+        accent = self._random_bright_color()
+        return f"""<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title}</title>
+  <style>
+    * {{ box-sizing: border-box; }}
+    body {{ margin: 0; min-height: 100vh; font-family: Arial, sans-serif; display: grid; place-items: center; background: linear-gradient(135deg, #111827, {accent}); color: #f8fafc; }}
+    .card {{ width: min(520px, calc(100% - 24px)); padding: 24px; border-radius: 26px; background: rgba(15,23,42,0.84); border: 1px solid rgba(255,255,255,0.08); }}
+    .input {{ display: grid; grid-template-columns: 1fr auto; gap: 12px; margin-top: 18px; }}
+    input {{ padding: 14px 16px; border-radius: 16px; border: 0; }}
+    button {{ padding: 14px 18px; border-radius: 16px; border: 0; background: {accent}; color: #091018; font-weight: 700; }}
+    .tasks {{ display: grid; gap: 10px; margin-top: 18px; }}
+    .task {{ padding: 14px 16px; border-radius: 16px; background: rgba(255,255,255,0.06); }}
+  </style>
+</head>
+<body>
+  <section class="card">
+    <h1>{title}</h1>
+    <p>Минималистичный список задач с быстрым добавлением, фильтрами и статусами выполнения.</p>
+    <div class="input">
+      <input placeholder="Добавить задачу..." />
+      <button type="button">Добавить</button>
+    </div>
+    <div class="tasks">
+      <div class="task">Собрать главную страницу</div>
+      <div class="task">Проверить адаптивность</div>
+      <div class="task">Подключить хранение задач</div>
+    </div>
+  </section>
+</body>
+</html>"""
+
+    def _generate_calendar_html(self, message: str) -> str:
+        title = self._escape_html(self._title_case_topic(self._extract_topic_phrase(message) or "Календарь"))
+        accent = self._random_bright_color()
+        return f"""<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title}</title>
+  <style>
+    * {{ box-sizing: border-box; }}
+    body {{ margin: 0; font-family: Arial, sans-serif; background: #f4f7fb; color: #152033; padding: 24px; }}
+    .wrap {{ width: min(1120px, 100%); margin: 0 auto; }}
+    .top {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }}
+    .month {{ padding: 22px; border-radius: 24px; background: #fff; box-shadow: 0 12px 28px rgba(15,23,42,0.08); }}
+    .grid {{ display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin-top: 16px; }}
+    .day {{ min-height: 110px; padding: 12px; border-radius: 18px; background: rgba(0,0,0,0.03); }}
+    .mark {{ display: inline-block; margin-top: 10px; padding: 6px 10px; border-radius: 999px; background: {accent}; color: #091018; font-weight: 700; }}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="top"><h1>{title}</h1><div class="mark">Сегодня</div></div>
+    <section class="month">
+      <div class="grid">
+        <div class="day">1</div><div class="day">2</div><div class="day">3</div><div class="day">4</div><div class="day">5</div><div class="day">6</div><div class="day">7</div>
+        <div class="day">8</div><div class="day">9</div><div class="day">10</div><div class="day">11</div><div class="day">12</div><div class="day">13</div><div class="day">14</div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>"""
+
+    def _generate_crm_html(self, message: str) -> str:
+        title = self._escape_html(self._title_case_topic(self._extract_topic_phrase(message) or "CRM"))
+        accent = self._random_bright_color()
+        return f"""<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title}</title>
+  <style>
+    * {{ box-sizing: border-box; }}
+    body {{ margin: 0; font-family: Arial, sans-serif; background: #0f172a; color: #eef2ff; }}
+    .layout {{ display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }}
+    aside {{ padding: 24px; background: rgba(15,23,42,0.95); border-right: 1px solid rgba(255,255,255,0.08); }}
+    main {{ padding: 24px; }}
+    .board {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }}
+    .column {{ padding: 18px; border-radius: 22px; background: rgba(255,255,255,0.05); }}
+    .deal {{ margin-top: 12px; padding: 14px; border-radius: 16px; background: rgba(255,255,255,0.06); border-left: 4px solid {accent}; }}
+    @media (max-width: 900px) {{ .layout {{ grid-template-columns: 1fr; }} .board {{ grid-template-columns: 1fr; }} }}
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside><h1>{title}</h1><p>Клиенты, сделки, задачи менеджеров и статус воронки продаж.</p></aside>
+    <main>
+      <section class="board">
+        <div class="column"><h2>Новые</h2><div class="deal">Заявка с лендинга</div></div>
+        <div class="column"><h2>В работе</h2><div class="deal">Переговоры с клиентом</div></div>
+        <div class="column"><h2>Закрыто</h2><div class="deal">Сделка оформлена</div></div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>"""
+
     def _generate_search_html(self, message: str) -> str:
         title = self._escape_html(self._title_case_topic(self._extract_topic_phrase(message) or "Поиск"))
         accent = self._random_bright_color()
@@ -2868,6 +3054,16 @@ if cleaned == "/memory":
         normalized = normalize(message)
         if any(word in normalized for word in ("база дан", "базу дан", "даных", "postgres", "sql", "schema", "таблиц")):
             return self._generate_database_schema(message)
+        if any(word in normalized for word in ("todo", "to do", "задачник", "список задач")):
+            return self._generate_todo_html(message)
+        if any(word in normalized for word in ("календар", "calendar", "расписан")):
+            return self._generate_calendar_html(message)
+        if any(word in normalized for word in ("crm", "клиент", "воронк", "сделк")):
+            return self._generate_crm_html(message)
+        if any(word in normalized for word in ("блог", "blog", "стат", "новост")):
+            return self._generate_blog_html(message)
+        if any(word in normalized for word in ("форум", "forum", "тред", "обсужден")):
+            return self._generate_forum_html(message)
         if any(word in normalized for word in ("логин", "регистрац", "авторизац")):
             return self._generate_auth_html(message)
         if any(word in normalized for word in ("уведомлен", "notification", "push")):
@@ -2914,7 +3110,9 @@ if cleaned == "/memory":
             "сгенерируй", "генерируй", "страниц", "сайт", "чат", "логин", "регистрац",
             "авторизац", "админ", "панел", "memory", "профил", "лендинг", "магазин",
             "каталог", "товар", "дашборд", "dashboard", "shop", "landing", "уведомлен",
-            "рулетк", "поиск", "postgres", "sql", "schema", "таблиц", "даных", "push", "notification"
+            "рулетк", "поиск", "postgres", "sql", "schema", "таблиц", "даных", "push", "notification",
+            "блог", "blog", "форум", "forum", "todo", "задачник", "календар", "calendar",
+            "crm", "клиент", "воронк", "сделк", "новост"
         )
         if not any(word in normalized for word in coding_markers):
             return None
