@@ -58,7 +58,7 @@ INDEX_VERSION = 4
 SERPAPI_ENDPOINT = "https://serpapi.com/search.json"
 OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses"
 DATABASE_RUNTIME_ERROR = ""
-LOCAL_ONLY_REPLIES = True
+LOCAL_ONLY_REPLIES = False
 
 STOPWORDS = {
     "а",
@@ -2011,19 +2011,6 @@ class SmartChatBot:
                 "```"
             )
 
-        if "javascript" in normalized or " js " in f" {normalized} ":
-            return (
-                "Вот простой пример запроса на JavaScript:\n\n"
-                "```javascript\n"
-                "async function loadData() {\n"
-                "  const response = await fetch('/api/data');\n"
-                "  const data = await response.json();\n"
-                "  console.log(data);\n"
-                "}\n\n"
-                "loadData();\n"
-                "```"
-            )
-
         if "python" in normalized:
             return (
                 "Вот минимальный пример на Python:\n\n"
@@ -2480,11 +2467,21 @@ class SmartChatBot:
         return None
 
     def reply(self, message: str, attachments: list[dict] | None = None) -> str:
-        cleaned = message.strip()
-        if not cleaned:
+        user_input = message.strip()
+        if not user_input:
             return "Напиши вопрос или тему, и я отвечу."
-        self._extract_user_facts(cleaned)
+        self._extract_user_facts(user_input)
         matches: list[tuple[float, dict]] | None = None
+
+        if self.use_openai:
+            llm_answer = openai_generate_reply(user_input, self.history, self.user_profile, attachments=attachments)
+            if llm_answer:
+                answer = self._add_emoji(llm_answer, user_input)
+                self.history.append((user_input, answer))
+                self.history = self.history[-8:]
+                return answer
+
+        cleaned = user_input
 
         implicit_query = self._extract_search_followup(cleaned)
         if implicit_query:
@@ -2569,14 +2566,6 @@ class SmartChatBot:
             self.history.append((cleaned, contextual))
             self.history = self.history[-8:]
             return contextual
-
-        if self.use_openai:
-            llm_answer = openai_generate_reply(cleaned, self.history, self.user_profile, attachments=attachments)
-            if llm_answer:
-                answer = self._add_emoji(llm_answer, cleaned)
-                self.history.append((cleaned, answer))
-                self.history = self.history[-8:]
-                return answer
 
         creative = self._generate_creative_reply(cleaned, [])
         if creative:
