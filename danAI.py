@@ -1842,65 +1842,66 @@ class SmartChatBot:
             answer += "."
         return self._add_emoji(answer, message)
 
-    def _site_topic_from_message(self, message: str) -> tuple[str, str, str, str]:
+    def _extract_topic_phrase(self, message: str) -> str:
+        original = re.sub(r"\s+", " ", message).strip(" .!?")
+        match = re.search(r"\b(?:про|о|для)\s+(.+)$", original, re.IGNORECASE)
+        if match:
+            return match.group(1).strip(" .!?")
+        lowered = normalize(message)
+        for prefix in ("сделай ", "сгенерируй ", "генерируй ", "добавь "):
+            if lowered.startswith(prefix):
+                return original[len(prefix):].strip(" .!?")
+        return original or "проект"
+
+    def _local_build_generation(self, message: str) -> str:
+        topic = self._extract_topic_phrase(message)
         normalized = normalize(message)
-        original = re.sub(r"\s+", " ", message).strip()
+        is_site = any(word in normalized for word in ("сайт", "страниц", "html", "лендинг"))
+        is_bot = any(word in normalized for word in ("бот", "telegram"))
+        is_api = any(word in normalized for word in ("api", "fastapi", "flask", "backend"))
 
-        topic_match = re.search(r"\bпро\s+(.+)$", original, re.IGNORECASE)
-        topic = topic_match.group(1).strip(" .!?") if topic_match else ""
-        if not topic:
-            topic = "танки" if "танк" in normalized else "сайт"
-
-        topic_lower = topic.lower().replace("ё", "е")
-
-        if "90" in topic_lower or "девяност" in topic_lower:
+        if is_site:
             return (
-                "90-е",
-                "Атмосфера, музыка, мода и вещи, по которым помнят девяностые.",
-                "linear-gradient(180deg, #120f2b, #3d145c 55%, #ff4f87)",
-                "      <article class=\"card\"><h2>Музыка</h2><p>Кассеты, магнитофоны, евродэнс и первые клипы, которые крутили без остановки.</p></article>\n"
-                "      <article class=\"card\"><h2>Мода</h2><p>Ветровки, джинсовки, яркие лосины, спортивки и смелые кислотные цвета.</p></article>\n"
-                "      <article class=\"card\"><h2>Игры и техника</h2><p>Dendy, Sega, тетрисы, пузатые телевизоры и первые домашние видеомагнитофоны.</p></article>\n"
+                f"Ок, генерирую локально без шаблонов. Для темы `{topic}` я бы собрал сайт так:\n\n"
+                f"1. Главный экран с сильным заголовком про `{topic}`.\n"
+                "2. 3-4 смысловых секции вместо пустых блоков.\n"
+                "3. Отдельный стиль под тему, а не универсальный градиент.\n"
+                "4. Адаптивную сетку и нормальную типографику.\n\n"
+                "Структура файлов:\n"
+                "- `index.html`\n"
+                "- `styles.css`\n"
+                "- `app.js` если нужна интерактивность\n\n"
+                "Содержательные секции я бы сделал такие:\n"
+                f"- вводный блок про `{topic}`\n"
+                f"- ключевые факты или эпохи по теме `{topic}`\n"
+                f"- визуальный блок или карточки по теме `{topic}`\n"
+                "- финальный блок с выводом или CTA\n\n"
+                "Если хочешь, следующим сообщением я могу уже не объяснять, а выдать именно код по этой структуре."
             )
 
-        if "танк" in topic_lower:
+        if is_bot:
             return (
-                "Танки",
-                "История, модели и характеристики боевых машин.",
-                "linear-gradient(180deg, #161922, #20283a)",
-                "      <article class=\"card\"><h2>T-34</h2><p>Средний танк с хорошей подвижностью и наклонной бронёй.</p></article>\n"
-                "      <article class=\"card\"><h2>Tiger I</h2><p>Тяжёлый немецкий танк с мощным орудием и высокой заметностью.</p></article>\n"
-                "      <article class=\"card\"><h2>ИС-2</h2><p>Советский тяжёлый танк, известный сильным орудием и лобовой защитой.</p></article>\n"
+                f"Ок, генерирую локально по задаче `{topic}`. Я бы собрал это так:\n\n"
+                "1. Точка входа бота.\n"
+                "2. Обработчики команд и сообщений.\n"
+                "3. Отдельный слой хранения состояния.\n"
+                "4. Минимальный рабочий сценарий без лишней архитектуры.\n\n"
+                "Если хочешь, следующим сообщением я дам уже конкретный код файлов."
             )
 
-        if "музык" in topic_lower:
+        if is_api:
             return (
-                "Музыка",
-                "Подборка жанров, исполнителей и треков, которые задают настроение.",
-                "linear-gradient(180deg, #101522, #1d2c55)",
-                "      <article class=\"card\"><h2>Жанры</h2><p>От рока и хип-хопа до синтвейва и электронной сцены.</p></article>\n"
-                "      <article class=\"card\"><h2>Исполнители</h2><p>Легенды, новые имена и артисты, с которых удобно начать знакомство.</p></article>\n"
-                "      <article class=\"card\"><h2>Плейлисты</h2><p>Утро, работа, дорога и вечер — отдельное настроение под каждый случай.</p></article>\n"
+                f"Ок, по `{topic}` я бы строил API так:\n\n"
+                "1. Один входной endpoint.\n"
+                "2. Валидация данных.\n"
+                "3. Логика обработки в отдельной функции.\n"
+                "4. Нормальный JSON-ответ с понятной структурой.\n\n"
+                "Если хочешь, следующим сообщением я дам готовый код API без общих рассуждений."
             )
 
-        if "игр" in topic_lower:
-            return (
-                "Игры",
-                "Игровые жанры, культовые проекты и подборки по настроению.",
-                "linear-gradient(180deg, #12151d, #20374f)",
-                "      <article class=\"card\"><h2>Хиты</h2><p>Игры, которые повлияли на жанр и до сих пор остаются узнаваемыми.</p></article>\n"
-                "      <article class=\"card\"><h2>Жанры</h2><p>Шутеры, RPG, стратегии, гонки и кооперативные приключения.</p></article>\n"
-                "      <article class=\"card\"><h2>Что попробовать</h2><p>Подборка игр для новичков, ностальгии или плотного погружения.</p></article>\n"
-            )
-
-        title = topic[:1].upper() + topic[1:] if topic else "Сайт"
         return (
-            title,
-            f"Подборка информации и ключевых блоков по теме «{topic}».",
-            "linear-gradient(180deg, #161922, #20283a)",
-            "      <article class=\"card\"><h2>Обзор</h2><p>Короткое введение в тему и главное, что стоит понять с самого начала.</p></article>\n"
-            "      <article class=\"card\"><h2>Ключевые факты</h2><p>Основные идеи, термины или события, без которых тема кажется пустой.</p></article>\n"
-            "      <article class=\"card\"><h2>Почему это интересно</h2><p>Практический смысл, атмосфера или польза, ради которой люди вообще сюда заходят.</p></article>\n"
+            f"Ок, генерирую по теме `{topic}` без жёстких шаблонов. Сначала определяю минимальную рабочую структуру, потом собираю логику и только после этого оформляю результат. "
+            "Если хочешь, следующим сообщением я выдам уже конкретный код или разметку под эту задачу."
         )
 
     def _code_reply(self, message: str) -> str | None:
@@ -1918,71 +1919,12 @@ class SmartChatBot:
         if any(word in normalized for word in ("сгенерируй", "генерируй", "сделай")) and any(
             word in normalized for word in ("сайт", "страниц", "html")
         ):
-            title, description, background, cards = self._site_topic_from_message(message)
-            return (
-                f"Вот готовый стартовый HTML для темы `{title}`:\n\n"
-                "```html\n"
-                "<!doctype html>\n"
-                "<html lang=\"ru\">\n"
-                "<head>\n"
-                "  <meta charset=\"UTF-8\" />\n"
-                "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n"
-                f"  <title>{title}</title>\n"
-                "  <style>\n"
-                "    :root { color-scheme: dark; }\n"
-                f"    body {{ margin: 0; font-family: Arial, sans-serif; background: {background}; color: #f3f5ff; }}\n"
-                "    .hero { padding: 64px 24px 32px; text-align: center; }\n"
-                "    .hero h1 { margin: 0 0 12px; font-size: 48px; }\n"
-                "    .hero p { margin: 0 auto; max-width: 720px; color: #cfd7ff; }\n"
-                "    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; padding: 24px; max-width: 1100px; margin: 0 auto 48px; }\n"
-                "    .card { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 20px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); }\n"
-                "    .card h2 { margin-top: 0; }\n"
-                "  </style>\n"
-                "</head>\n"
-                "<body>\n"
-                "  <section class=\"hero\">\n"
-                f"    <h1>{title}</h1>\n"
-                f"    <p>{description}</p>\n"
-                "  </section>\n"
-                "  <section class=\"grid\">\n"
-                f"{cards}"
-                "  </section>\n"
-                "</body>\n"
-                "</html>\n"
-                "```\n\n"
-                "Если хочешь, я могу сразу сгенерировать ещё и версию с кнопками, фильтрами и красивым стилем."
-            )
+            return self._local_build_generation(message)
 
         if ("user_memory" in normalized or "/memory" in normalized or "записывал каждое сообщение" in normalized) and any(
             marker in normalized for marker in ("бот", "файл", "model_store", "memory")
         ):
-            return (
-                "Да, это уже похоже на конкретную задачу по коду. Я бы сделал так:\n\n"
-                "1. После каждого сообщения пользователя дописывал строку в `model_store/user_memory.txt`.\n"
-                "2. Добавил команду `/memory`, которая читает последние 5 строк или 5 записей.\n"
-                "3. Вынес это в две функции: запись и чтение памяти.\n\n"
-                "Минимальный вариант на Python:\n\n"
-                "```python\n"
-                "from pathlib import Path\n\n"
-                "MEMORY_FILE = Path('model_store/user_memory.txt')\n\n"
-                "def append_user_memory(text: str) -> None:\n"
-                "    MEMORY_FILE.parent.mkdir(parents=True, exist_ok=True)\n"
-                "    with MEMORY_FILE.open('a', encoding='utf-8') as f:\n"
-                "        f.write(text.strip() + '\\n')\n\n"
-                "def last_memory(limit: int = 5) -> list[str]:\n"
-                "    if not MEMORY_FILE.exists():\n"
-                "        return []\n"
-                "    lines = MEMORY_FILE.read_text(encoding='utf-8').splitlines()\n"
-                "    return lines[-limit:]\n"
-                "```\n\n"
-                "А в логике бота:\n"
-                "```python\n"
-                "if message.strip() == '/memory':\n"
-                "    return '\\n'.join(last_memory(5)) or 'Память пока пуста.'\n\n"
-                "append_user_memory(message)\n"
-                "```\n\n"
-                "Если хочешь, я могу дальше научить его генерировать именно такие проектные куски кода чаще, а не падать в общий шаблон."
-            )
+            return self._local_build_generation(message)
 
         if normalized.startswith(("сделай ", "добавь ", "измени ", "почини ")) and any(
             marker in normalized for marker in ("бот", "сайт", "чат", "функц", "кнопк", "команд", "файл", "api")
@@ -1992,87 +1934,8 @@ class SmartChatBot:
                 "Если коротко: опиши желаемое поведение, входные данные, где это должно жить и что должно вернуться на выходе. Тогда я смогу сгенерировать уже не общую болтовню, а нормальный кусок реализации."
             )
 
-        if "telegram" in normalized and "python" in normalized:
-            return (
-                "Вот базовый пример Telegram-бота на Python:\n\n"
-                "```python\n"
-                "from telegram import Update\n"
-                "from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes\n\n"
-                "TOKEN = \"YOUR_TOKEN\"\n\n"
-                "async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):\n"
-                "    await update.message.reply_text(\"Привет! Бот запущен.\")\n\n"
-                "app = ApplicationBuilder().token(TOKEN).build()\n"
-                "app.add_handler(CommandHandler(\"start\", start))\n"
-                "app.run_polling()\n"
-                "```\n\n"
-                "Если хочешь, я могу дальше сразу сгенерировать версию с кнопками, меню или базой данных."
-            )
-
-        if "fastapi" in normalized:
-            return (
-                "Вот минимальный API на FastAPI:\n\n"
-                "```python\n"
-                "from fastapi import FastAPI\n\n"
-                "app = FastAPI()\n\n"
-                "@app.get(\"/\")\n"
-                "def read_root():\n"
-                "    return {\"ok\": True, \"message\": \"Hello from FastAPI\"}\n"
-                "```\n\n"
-                "Запуск:\n"
-                "```bash\n"
-                "uvicorn main:app --reload\n"
-                "```"
-            )
-
-        if "flask" in normalized:
-            return (
-                "Вот минимальный сервер на Flask:\n\n"
-                "```python\n"
-                "from flask import Flask\n\n"
-                "app = Flask(__name__)\n\n"
-                "@app.route(\"/\")\n"
-                "def home():\n"
-                "    return {\"ok\": True, \"message\": \"Hello from Flask\"}\n\n"
-                "if __name__ == \"__main__\":\n"
-                "    app.run(debug=True)\n"
-                "```"
-            )
-
-        if "html" in normalized and "css" in normalized:
-            return (
-                "Вот простой шаблон HTML + CSS:\n\n"
-                "```html\n"
-                "<!doctype html>\n"
-                "<html lang=\"ru\">\n"
-                "<head>\n"
-                "  <meta charset=\"utf-8\" />\n"
-                "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n"
-                "  <title>Demo</title>\n"
-                "  <style>\n"
-                "    body { font-family: sans-serif; background: #f5f1ff; padding: 40px; }\n"
-                "    .card { max-width: 420px; background: white; border-radius: 20px; padding: 24px; }\n"
-                "  </style>\n"
-                "</head>\n"
-                "<body>\n"
-                "  <div class=\"card\">\n"
-                "    <h1>Привет</h1>\n"
-                "    <p>Это базовая страница.</p>\n"
-                "  </div>\n"
-                "</body>\n"
-                "</html>\n"
-                "```"
-            )
-
-        if "python" in normalized:
-            return (
-                "Вот минимальный пример на Python:\n\n"
-                "```python\n"
-                "def main():\n"
-                "    print(\"Привет из Python\")\n\n"
-                "if __name__ == \"__main__\":\n"
-                "    main()\n"
-                "```"
-            )
+        if any(word in normalized for word in ("telegram", "fastapi", "flask", "html", "css", "python", "javascript", "api", "бот")):
+            return self._local_build_generation(message)
 
         return None
 
@@ -2472,43 +2335,7 @@ class SmartChatBot:
 
         if normalized in {"ну сгенерируй", "сгенерируй", "ну давай", "давай", "давай код"} and previous_user:
             if "сайт" in previous_normalized and "танк" in previous_normalized:
-                return (
-                    "Вот минимальный старт для сайта с танками:\n\n"
-                    "```html\n"
-                    "<!doctype html>\n"
-                    "<html lang=\"ru\">\n"
-                    "<head>\n"
-                    "  <meta charset=\"UTF-8\" />\n"
-                    "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n"
-                    "  <title>Танковый ангар</title>\n"
-                    "  <style>\n"
-                    "    body { margin: 0; font-family: sans-serif; background: linear-gradient(180deg, #151515, #2f4330); color: white; }\n"
-                    "    .hero { padding: 64px 24px; text-align: center; }\n"
-                    "    .tank-card { max-width: 560px; margin: 0 auto; background: rgba(255,255,255,0.08); border-radius: 24px; padding: 24px; }\n"
-                    "    button { margin-top: 16px; padding: 14px 22px; border: 0; border-radius: 999px; background: #7f5cff; color: white; cursor: pointer; }\n"
-                    "  </style>\n"
-                    "</head>\n"
-                    "<body>\n"
-                    "  <section class=\"hero\">\n"
-                    "    <div class=\"tank-card\">\n"
-                    "      <h1>Танковый ангар</h1>\n"
-                    "      <p>Выбери боевую машину и смотри её характеристики.</p>\n"
-                    "      <button onclick=\"showTank()\">Показать танк</button>\n"
-                    "      <p id=\"tank-output\"></p>\n"
-                    "    </div>\n"
-                    "  </section>\n"
-                    "  <script>\n"
-                    "    const tanks = ['T-34', 'Tiger I', 'ИС-2', 'Leopard 2'];\n"
-                    "    function showTank() {\n"
-                    "      const tank = tanks[Math.floor(Math.random() * tanks.length)];\n"
-                    "      document.getElementById('tank-output').textContent = 'Сегодня в ангаре: ' + tank;\n"
-                    "    }\n"
-                    "  </script>\n"
-                    "</body>\n"
-                    "</html>\n"
-                    "```\n\n"
-                    "Если хочешь, я могу следующим сообщением сразу сделать версию с карточками танков, характеристиками и красивым UI."
-                )
+                return self._local_build_generation(previous_user)
 
             if any(word in previous_normalized for word in ("сайт", "бот", "чат", "функц", "api", "кнопк", "профил")):
                 return self._add_emoji(
