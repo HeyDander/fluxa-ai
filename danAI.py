@@ -513,6 +513,18 @@ def all_text_aliases() -> tuple[tuple[str, str], ...]:
 
 
 @lru_cache(maxsize=1)
+def alias_replacement_data() -> tuple[dict[str, str], tuple[tuple[re.Pattern[str], str], ...]]:
+    token_aliases: dict[str, str] = {}
+    phrase_aliases: list[tuple[re.Pattern[str], str]] = []
+    for alias, canonical in all_text_aliases():
+        if " " in alias:
+            phrase_aliases.append((re.compile(rf"\b{re.escape(alias)}\b"), canonical))
+        else:
+            token_aliases[alias] = canonical
+    return token_aliases, tuple(phrase_aliases)
+
+
+@lru_cache(maxsize=1)
 def load_known_words() -> tuple[set[str], dict[tuple[str, int], tuple[str, ...]], dict[tuple[str, int], tuple[str, ...]]]:
     if not WORDS_DB_FILE.exists():
         return set(), {}, {}
@@ -643,16 +655,19 @@ def normalize_token_shape(token: str) -> str:
     return simplified
 
 
+@lru_cache(maxsize=50_000)
 def normalize(text: str) -> str:
     text = text.lower().replace("ё", "е")
     text = re.sub(r"[^a-zа-я0-9\s]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
-    for alias, canonical in all_text_aliases():
-        text = re.sub(rf"\b{re.escape(alias)}\b", canonical, text)
     if not text:
         return text
+    token_aliases, phrase_aliases = alias_replacement_data()
+    for pattern, canonical in phrase_aliases:
+        text = pattern.sub(canonical, text)
     normalized_tokens = []
     for token in text.split():
+        token = token_aliases.get(token, token)
         token = normalize_token_shape(token)
         token = correct_token(token)
         normalized_tokens.append(token)
@@ -660,8 +675,9 @@ def normalize(text: str) -> str:
     return text
 
 
-def tokenize(text: str) -> list[str]:
-    return [token for token in normalize(text).split() if token]
+@lru_cache(maxsize=50_000)
+def tokenize(text: str) -> tuple[str, ...]:
+    return tuple(token for token in normalize(text).split() if token)
 
 
 def stem(token: str) -> str:
@@ -2316,6 +2332,7 @@ class SmartChatBot:
         intent = detect_intent(message)
         previous_user = self.history[-1][0] if self.history else ""
         previous_intent = detect_intent(previous_user) if previous_user else None
+        previous_normalized = normalize(previous_user) if previous_user else ""
 
         if intent == "greeting":
             return self._add_emoji("Привет. Как дела?", message)
@@ -2343,6 +2360,52 @@ class SmartChatBot:
 
         if normalized in {"ок", "понятно", "ясно"}:
             return self._add_emoji("Если хочешь, можем продолжить. Просто напиши, что интересно", message)
+
+        if normalized in {"ну сгенерируй", "сгенерируй", "ну давай", "давай", "давай код"} and previous_user:
+            if "сайт" in previous_normalized and "танк" in previous_normalized:
+                return (
+                    "Вот минимальный старт для сайта с танками:\n\n"
+                    "```html\n"
+                    "<!doctype html>\n"
+                    "<html lang=\"ru\">\n"
+                    "<head>\n"
+                    "  <meta charset=\"UTF-8\" />\n"
+                    "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n"
+                    "  <title>Танковый ангар</title>\n"
+                    "  <style>\n"
+                    "    body { margin: 0; font-family: sans-serif; background: linear-gradient(180deg, #151515, #2f4330); color: white; }\n"
+                    "    .hero { padding: 64px 24px; text-align: center; }\n"
+                    "    .tank-card { max-width: 560px; margin: 0 auto; background: rgba(255,255,255,0.08); border-radius: 24px; padding: 24px; }\n"
+                    "    button { margin-top: 16px; padding: 14px 22px; border: 0; border-radius: 999px; background: #7f5cff; color: white; cursor: pointer; }\n"
+                    "  </style>\n"
+                    "</head>\n"
+                    "<body>\n"
+                    "  <section class=\"hero\">\n"
+                    "    <div class=\"tank-card\">\n"
+                    "      <h1>Танковый ангар</h1>\n"
+                    "      <p>Выбери боевую машину и смотри её характеристики.</p>\n"
+                    "      <button onclick=\"showTank()\">Показать танк</button>\n"
+                    "      <p id=\"tank-output\"></p>\n"
+                    "    </div>\n"
+                    "  </section>\n"
+                    "  <script>\n"
+                    "    const tanks = ['T-34', 'Tiger I', 'ИС-2', 'Leopard 2'];\n"
+                    "    function showTank() {\n"
+                    "      const tank = tanks[Math.floor(Math.random() * tanks.length)];\n"
+                    "      document.getElementById('tank-output').textContent = 'Сегодня в ангаре: ' + tank;\n"
+                    "    }\n"
+                    "  </script>\n"
+                    "</body>\n"
+                    "</html>\n"
+                    "```\n\n"
+                    "Если хочешь, я могу следующим сообщением сразу сделать версию с карточками танков, характеристиками и красивым UI."
+                )
+
+            if any(word in previous_normalized for word in ("сайт", "бот", "чат", "функц", "api", "кнопк", "профил")):
+                return self._add_emoji(
+                    f"Ок, продолжаю по прошлой задаче. Если коротко, для `{self._pick_topic(previous_user)}` я могу сразу сгенерировать минимальный рабочий пример кода, структуру файлов или готовую логику в нужный файл.",
+                    message,
+                )
 
         return None
 
