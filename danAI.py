@@ -1654,6 +1654,18 @@ class SmartChatBot:
         bot_markers = ("ты ", "ты?", "тебя", "тебе", "о тебе", "твой", "твоя", "сам", "бот")
         return any(marker in normalized for marker in bot_markers)
 
+    def _looks_like_prompt_injection(self, message: str) -> bool:
+        lowered = message.lower().replace("ё", "е")
+        markers = (
+            "override all instructions",
+            "ignore previous instructions",
+            "system:",
+            "system prompt",
+            "output only",
+            "prompt injection",
+        )
+        return any(marker in lowered for marker in markers)
+
     def _direct_answer(self, message: str) -> str | None:
         normalized = replace_number_words(message)
         normalized = normalized.replace("сколько будет", "").replace("чему равно", "").strip()
@@ -1690,6 +1702,12 @@ class SmartChatBot:
 
     def _bot_meta_answer(self, message: str) -> str | None:
         normalized = normalize(message)
+
+        if self._looks_like_prompt_injection(message):
+            return self._add_emoji(
+                "Похоже, ты прислал не обычный вопрос, а инструкцию или prompt-injection текст. Если хочешь, я могу либо объяснить, что это такое, либо просто сгенерировать нормальный HTML/CSS/JS по задаче.",
+                message,
+            )
 
         if any(phrase in normalized for phrase in ("кто ты", "что ты", "ты кто")):
             return self._add_emoji(BOT_META_RESPONSES["who"], message)
@@ -1821,6 +1839,8 @@ class SmartChatBot:
 
     def _code_reply(self, message: str) -> str | None:
         normalized = normalize(message)
+        if self._looks_like_prompt_injection(message):
+            return None
         coding_markers = (
             "код", "python", "js", "javascript", "html", "css", "flask", "fastapi",
             "telegram bot", "бот", "функц", "команд", "api", "файл", "user_memory", "/memory"
@@ -2443,6 +2463,12 @@ class SmartChatBot:
             self.history.append((cleaned, direct))
             self.history = self.history[-8:]
             return direct
+
+        injection_like = self._bot_meta_answer(cleaned) if self._looks_like_prompt_injection(cleaned) else None
+        if injection_like:
+            self.history.append((cleaned, injection_like))
+            self.history = self.history[-8:]
+            return injection_like
 
         code_answer = self._code_reply(cleaned)
         if code_answer:
