@@ -1843,10 +1843,59 @@ class SmartChatBot:
             return None
         coding_markers = (
             "код", "python", "js", "javascript", "html", "css", "flask", "fastapi",
-            "telegram bot", "бот", "функц", "команд", "api", "файл", "user_memory", "/memory"
+            "telegram bot", "бот", "функц", "команд", "api", "файл", "user_memory", "/memory",
+            "сгенерируй", "генерируй", "страниц", "сайт"
         )
         if not any(word in normalized for word in coding_markers):
             return None
+
+        if any(word in normalized for word in ("сгенерируй", "генерируй", "сделай")) and any(
+            word in normalized for word in ("сайт", "страниц", "html")
+        ):
+            title = "Танки" if "танк" in normalized else "Сайт"
+            description = "История, модели и характеристики боевых машин." if "танк" in normalized else "Готовая страница."
+            cards = (
+                "      <article class=\"card\"><h2>T-34</h2><p>Средний танк с хорошей подвижностью и наклонной бронёй.</p></article>\n"
+                "      <article class=\"card\"><h2>Tiger I</h2><p>Тяжёлый немецкий танк с мощным орудием и высокой заметностью.</p></article>\n"
+                "      <article class=\"card\"><h2>ИС-2</h2><p>Советский тяжёлый танк, известный сильным орудием и лобовой защитой.</p></article>\n"
+            ) if "танк" in normalized else (
+                "      <article class=\"card\"><h2>Блок 1</h2><p>Короткое описание первого смыслового блока.</p></article>\n"
+                "      <article class=\"card\"><h2>Блок 2</h2><p>Короткое описание второго смыслового блока.</p></article>\n"
+                "      <article class=\"card\"><h2>Блок 3</h2><p>Короткое описание третьего смыслового блока.</p></article>\n"
+            )
+            return (
+                f"Вот готовый стартовый HTML для темы `{title}`:\n\n"
+                "```html\n"
+                "<!doctype html>\n"
+                "<html lang=\"ru\">\n"
+                "<head>\n"
+                "  <meta charset=\"UTF-8\" />\n"
+                "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n"
+                f"  <title>{title}</title>\n"
+                "  <style>\n"
+                "    :root { color-scheme: dark; }\n"
+                "    body { margin: 0; font-family: Arial, sans-serif; background: linear-gradient(180deg, #161922, #20283a); color: #f3f5ff; }\n"
+                "    .hero { padding: 64px 24px 32px; text-align: center; }\n"
+                "    .hero h1 { margin: 0 0 12px; font-size: 48px; }\n"
+                "    .hero p { margin: 0 auto; max-width: 720px; color: #cfd7ff; }\n"
+                "    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; padding: 24px; max-width: 1100px; margin: 0 auto 48px; }\n"
+                "    .card { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 20px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); }\n"
+                "    .card h2 { margin-top: 0; }\n"
+                "  </style>\n"
+                "</head>\n"
+                "<body>\n"
+                "  <section class=\"hero\">\n"
+                f"    <h1>{title}</h1>\n"
+                f"    <p>{description}</p>\n"
+                "  </section>\n"
+                "  <section class=\"grid\">\n"
+                f"{cards}"
+                "  </section>\n"
+                "</body>\n"
+                "</html>\n"
+                "```\n\n"
+                "Если хочешь, я могу сразу сгенерировать ещё и версию с кнопками, фильтрами и красивым стилем."
+            )
 
         if ("user_memory" in normalized or "/memory" in normalized or "записывал каждое сообщение" in normalized) and any(
             marker in normalized for marker in ("бот", "файл", "model_store", "memory")
