@@ -58,7 +58,7 @@ INDEX_VERSION = 4
 SERPAPI_ENDPOINT = "https://serpapi.com/search.json"
 OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses"
 DATABASE_RUNTIME_ERROR = ""
-LOCAL_ONLY_REPLIES = False
+LOCAL_ONLY_REPLIES = True
 
 STOPWORDS = {
     "а",
@@ -2472,14 +2472,6 @@ class SmartChatBot:
             return "Напиши вопрос или тему, и я отвечу."
         self._extract_user_facts(user_input)
         matches: list[tuple[float, dict]] | None = None
-
-        if self.use_openai:
-            llm_answer = openai_generate_reply(user_input, self.history, self.user_profile, attachments=attachments)
-            if llm_answer:
-                answer = self._add_emoji(llm_answer, user_input)
-                self.history.append((user_input, answer))
-                self.history = self.history[-8:]
-                return answer
 
         cleaned = user_input
 
