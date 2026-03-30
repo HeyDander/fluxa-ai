@@ -431,7 +431,8 @@ PROMO_DEFINITIONS = {
      "reward": {"reward": 500, "max_uses": 1},
      "noel": {"reward": 43000000000000000000000000, "max_uses": 2},
      "hi": {"reward": 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000., "max_uses": 2},
-     "vladskod": {"reward": 300, "max_uses": 2}
+     "vladskod": {"reward": 300, "max_uses": 2},
+     "samsung": {"reward": 500, "max_uses": 1}
      
 }
 
@@ -2247,8 +2248,334 @@ class SmartChatBot:
 </body>
 </html>"""
 
-    def _local_build_generation(self, message: str) -> str:
+    def _generate_auth_html(self, message: str) -> str:
+        title = self._escape_html(self._title_case_topic(self._extract_topic_phrase(message) or "Авторизация"))
+        accent = self._random_bright_color()
+        accent_soft = self._random_bright_color({accent})
+        return f"""<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title}</title>
+  <style>
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: Arial, sans-serif;
+      background:
+        radial-gradient(circle at top left, {accent_soft}, transparent 28%),
+        linear-gradient(135deg, {accent}, #111827);
+      color: #f8fafc;
+    }}
+    .card {{
+      width: min(420px, calc(100% - 24px));
+      padding: 28px;
+      border-radius: 24px;
+      background: rgba(15, 23, 42, 0.78);
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: 0 24px 60px rgba(0,0,0,0.35);
+    }}
+    h1 {{ margin: 0 0 10px; font-size: 36px; }}
+    p {{ margin: 0 0 22px; color: rgba(255,255,255,0.76); line-height: 1.55; }}
+    form {{ display: grid; gap: 14px; }}
+    input {{
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.06);
+      color: inherit;
+      font-size: 16px;
+    }}
+    button {{
+      padding: 14px 18px;
+      border: 0;
+      border-radius: 16px;
+      background: {accent};
+      color: #081018;
+      font-weight: 700;
+      cursor: pointer;
+    }}
+    .alt {{
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 14px;
+      font-size: 14px;
+    }}
+  </style>
+</head>
+<body>
+  <section class="card">
+    <h1>{title}</h1>
+    <p>Форма входа и регистрации в одном экране: email, пароль, быстрый вход и переключение между режимами без перезагрузки.</p>
+    <form>
+      <input type="email" placeholder="Email" />
+      <input type="password" placeholder="Пароль" />
+      <button type="button">Войти</button>
+    </form>
+    <div class="alt">
+      <span>Нет аккаунта? Зарегистрируйся</span>
+      <span>Забыл пароль?</span>
+    </div>
+  </section>
+</body>
+</html>"""
+
+    def _generate_chat_html(self, message: str) -> str:
+        title = self._escape_html(self._title_case_topic(self._extract_topic_phrase(message) or "Чат"))
+        accent = self._random_bright_color()
+        panel = self._random_bright_color({accent})
+        return f"""<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title}</title>
+  <style>
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(160deg, #0f172a, {accent});
+      color: #e5eefc;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+    }}
+    .app {{
+      width: min(980px, 100%);
+      height: min(760px, calc(100vh - 36px));
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 16px;
+    }}
+    .sidebar, .chat {{
+      background: rgba(15,23,42,0.78);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 24px;
+      overflow: hidden;
+    }}
+    .sidebar {{ padding: 18px; }}
+    .room {{ padding: 14px 16px; border-radius: 16px; background: rgba(255,255,255,0.04); margin-bottom: 10px; }}
+    .chat {{ display: grid; grid-template-rows: auto 1fr auto; }}
+    .header {{ padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.08); }}
+    .messages {{ padding: 20px; overflow: auto; display: grid; gap: 14px; }}
+    .bubble {{
+      max-width: 72%;
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.08);
+    }}
+    .bubble.me {{ margin-left: auto; background: {panel}; color: #111827; }}
+    .composer {{
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      padding: 16px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }}
+    input {{ padding: 14px 16px; border-radius: 16px; border: 0; }}
+    button {{ padding: 14px 18px; border-radius: 16px; border: 0; background: {panel}; color: #111827; font-weight: 700; }}
+    @media (max-width: 760px) {{
+      .app {{ grid-template-columns: 1fr; height: auto; }}
+      .sidebar {{ display: none; }}
+      .chat {{ min-height: calc(100vh - 36px); }}
+    }}
+  </style>
+</head>
+<body>
+  <main class="app">
+    <aside class="sidebar">
+      <h2>Комнаты</h2>
+      <div class="room">Общий чат</div>
+      <div class="room">Поддержка</div>
+      <div class="room">Проекты</div>
+    </aside>
+    <section class="chat">
+      <header class="header"><h1>{title}</h1></header>
+      <div class="messages">
+        <div class="bubble">Привет. Это интерфейс чата с нормальной лентой сообщений и отдельным composer снизу.</div>
+        <div class="bubble me">Нужен быстрый, чистый и понятный чат без лишнего мусора.</div>
+      </div>
+      <div class="composer">
+        <input placeholder="Напиши сообщение..." />
+        <button type="button">Отправить</button>
+      </div>
+    </section>
+  </main>
+</body>
+</html>"""
+
+    def _generate_admin_html(self, message: str) -> str:
+        title = self._escape_html(self._title_case_topic(self._extract_topic_phrase(message) or "Админка"))
+        accent = self._random_bright_color()
+        return f"""<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title}</title>
+  <style>
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #111827, {accent});
+      color: #f8fafc;
+    }}
+    .layout {{
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      min-height: 100vh;
+    }}
+    aside {{
+      padding: 24px;
+      background: rgba(15,23,42,0.92);
+      border-right: 1px solid rgba(255,255,255,0.08);
+    }}
+    main {{ padding: 24px; }}
+    .grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-top: 18px;
+    }}
+    .card {{
+      padding: 18px;
+      border-radius: 22px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.08);
+    }}
+    .big {{
+      margin-top: 18px;
+      min-height: 320px;
+    }}
+    @media (max-width: 820px) {{
+      .layout {{ grid-template-columns: 1fr; }}
+      aside {{ border-right: 0; border-bottom: 1px solid rgba(255,255,255,0.08); }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside>
+      <h1>{title}</h1>
+      <p>Пользователи, кредиты, жалобы, бан-лист и быстрые действия поддержки.</p>
+    </aside>
+    <main>
+      <div class="grid">
+        <section class="card"><h2>Пользователи</h2><p>Список аккаунтов, статусы и поиск.</p></section>
+        <section class="card"><h2>Кредиты</h2><p>Начисления, списания и история операций.</p></section>
+        <section class="card"><h2>Модерация</h2><p>Временный бан, удаление и поддержка.</p></section>
+      </div>
+      <section class="card big"><h2>Живая панель</h2><p>Тут можно рендерить события, запросы пользователей и системные действия в реальном времени.</p></section>
+    </main>
+  </div>
+</body>
+</html>"""
+
+    def _generate_api_code(self, message: str) -> str:
+        slug = re.sub(r"[^a-z0-9]+", "_", normalize(self._extract_topic_phrase(message)))[:24].strip("_") or "items"
+        return f"""from fastapi import FastAPI
+from pydantic import BaseModel
+
+app = FastAPI()
+
+
+class {slug.title().replace('_', '')}Payload(BaseModel):
+    name: str
+    description: str | None = None
+
+
+@app.get("/health")
+def health():
+    return {{"ok": True}}
+
+
+@app.post("/{slug}")
+def create_{slug}(payload: {slug.title().replace('_', '')}Payload):
+    return {{
+        "ok": True,
+        "item": payload.model_dump(),
+    }}
+"""
+
+    def _generate_telegram_bot_code(self, message: str) -> str:
+        return """from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Привет. Бот запущен.")
+
+
+async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text or ""
+    await update.message.reply_text(f"Ты написал: {text}")
+
+
+def main():
+    app = ApplicationBuilder().token("PUT_TOKEN_HERE").build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
+"""
+
+    def _generate_memory_patch_code(self, message: str) -> str:
+        return """MEMORY_FILE = MODEL_DIR / "user_memory.txt"
+
+
+def append_user_memory(text: str) -> None:
+    MEMORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with MEMORY_FILE.open("a", encoding="utf-8") as file:
+        file.write(text.strip() + "\\n")
+
+
+def tail_user_memory(limit: int = 5) -> list[str]:
+    if not MEMORY_FILE.exists():
+        return []
+    lines = MEMORY_FILE.read_text(encoding="utf-8").splitlines()
+    return lines[-limit:]
+
+
+# пример вызова внутри reply()
+append_user_memory(cleaned)
+
+# пример команды /memory
+if cleaned == "/memory":
+    recent = tail_user_memory(5)
+    return "\\n".join(recent) if recent else "Память пуста."
+"""
+
+    def _generate_structured_artifact(self, message: str) -> str:
+        normalized = normalize(message)
+        if any(word in normalized for word in ("логин", "регистрац", "авторизац")):
+            return self._generate_auth_html(message)
+        if "админ" in normalized:
+            return self._generate_admin_html(message)
+        if "чат" in normalized:
+            return self._generate_chat_html(message)
+        if any(word in normalized for word in ("fastapi", "api", "backend", "endpoint")):
+            return self._generate_api_code(message)
+        if any(word in normalized for word in ("telegram", "телеграм", "бот")):
+            return self._generate_telegram_bot_code(message)
+        if any(word in normalized for word in ("user_memory", "/memory", "memory", "записывал каждое сообщение")):
+            return self._generate_memory_patch_code(message)
         return self._generate_site_html(message)
+
+    def _local_build_generation(self, message: str) -> str:
+        return self._generate_structured_artifact(message)
 
     def _code_reply(self, message: str) -> str | None:
         normalized = normalize(message)
@@ -2262,7 +2589,8 @@ class SmartChatBot:
         coding_markers = (
             "код", "python", "js", "javascript", "html", "css", "flask", "fastapi",
             "telegram bot", "бот", "функц", "команд", "api", "файл", "user_memory", "/memory",
-            "сгенерируй", "генерируй", "страниц", "сайт"
+            "сгенерируй", "генерируй", "страниц", "сайт", "чат", "логин", "регистрац",
+            "авторизац", "админ", "панел", "memory"
         )
         if not any(word in normalized for word in coding_markers):
             return None
