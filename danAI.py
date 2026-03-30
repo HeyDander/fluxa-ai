@@ -2670,6 +2670,123 @@ class SmartChatBot:
 </body>
 </html>"""
 
+    def _generate_search_html(self, message: str) -> str:
+        title = self._escape_html(self._title_case_topic(self._extract_topic_phrase(message) or "Поиск"))
+        accent = self._random_bright_color()
+        return f"""<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title}</title>
+  <style>
+    * {{ box-sizing: border-box; }}
+    body {{ margin: 0; font-family: Arial, sans-serif; background: #0f172a; color: #e2e8f0; padding: 24px; }}
+    .wrap {{ width: min(1040px, 100%); margin: 0 auto; }}
+    .hero {{ padding: 24px; border-radius: 24px; background: rgba(255,255,255,0.06); }}
+    .search {{ display: grid; grid-template-columns: 1fr auto; gap: 12px; margin-top: 18px; }}
+    input {{ padding: 16px 18px; border-radius: 18px; border: 0; font-size: 16px; }}
+    button {{ padding: 16px 18px; border-radius: 18px; border: 0; background: {accent}; color: #091018; font-weight: 700; }}
+    .results {{ display: grid; gap: 14px; margin-top: 20px; }}
+    .item {{ padding: 18px; border-radius: 20px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); }}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <h1>{title}</h1>
+      <p>Экран поиска с полем ввода, выдачей результатов, фильтрами и быстрым доступом к релевантным совпадениям.</p>
+      <div class="search">
+        <input placeholder="Найти по названию, тегу или описанию..." />
+        <button type="button">Искать</button>
+      </div>
+    </section>
+    <section class="results">
+      <article class="item"><h2>Результат 1</h2><p>Карточка совпадения с подсветкой, описанием и ссылкой на переход.</p></article>
+      <article class="item"><h2>Результат 2</h2><p>Блок фильтрации, сортировки и пустого состояния, если ничего не найдено.</p></article>
+    </section>
+  </main>
+</body>
+</html>"""
+
+    def _generate_notification_code(self, message: str) -> str:
+        return """const enableNotificationsButton = document.querySelector('#enable-notifications');
+
+async function enableNotifications() {
+  if (!('Notification' in window)) {
+    console.log('Браузер не поддерживает уведомления');
+    return;
+  }
+
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    console.log('Пользователь не разрешил уведомления');
+    return;
+  }
+
+  new Notification('Уведомления включены', {
+    body: 'Теперь можно показывать новые события пользователю.',
+  });
+}
+
+enableNotificationsButton?.addEventListener('click', enableNotifications);
+"""
+
+    def _generate_roulette_html(self, message: str) -> str:
+        accent = self._random_bright_color()
+        return f"""<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Чат-рулетка</title>
+  <style>
+    * {{ box-sizing: border-box; }}
+    body {{ margin: 0; min-height: 100vh; font-family: Arial, sans-serif; background: linear-gradient(135deg, #111827, {accent}); color: #f8fafc; display: grid; place-items: center; }}
+    .card {{ width: min(540px, calc(100% - 24px)); padding: 28px; border-radius: 28px; background: rgba(15,23,42,0.84); border: 1px solid rgba(255,255,255,0.08); }}
+    .actions {{ display: flex; gap: 12px; margin-top: 18px; }}
+    button {{ flex: 1; padding: 15px 18px; border: 0; border-radius: 18px; font-weight: 700; }}
+    .primary {{ background: {accent}; color: #091018; }}
+    .ghost {{ background: rgba(255,255,255,0.08); color: #f8fafc; }}
+  </style>
+</head>
+<body>
+  <section class="card">
+    <h1>Чат-рулетка</h1>
+    <p>Минимальный экран анонимного подбора собеседника: ожидание пары, быстрый пропуск, жалоба и выход из текущего диалога.</p>
+    <div class="actions">
+      <button class="primary" type="button">Найти собеседника</button>
+      <button class="ghost" type="button">Следующий</button>
+      <button class="ghost" type="button">Выйти</button>
+    </div>
+  </section>
+</body>
+</html>"""
+
+    def _generate_database_schema(self, message: str) -> str:
+        return """CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE chats (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE messages (
+    id SERIAL PRIMARY KEY,
+    chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    text TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+"""
+
     def _generate_api_code(self, message: str) -> str:
         slug = re.sub(r"[^a-z0-9]+", "_", normalize(self._extract_topic_phrase(message)))[:24].strip("_") or "items"
         return f"""from fastapi import FastAPI
@@ -2749,8 +2866,16 @@ if cleaned == "/memory":
 
     def _generate_structured_artifact(self, message: str) -> str:
         normalized = normalize(message)
+        if any(word in normalized for word in ("база дан", "базу дан", "даных", "postgres", "sql", "schema", "таблиц")):
+            return self._generate_database_schema(message)
         if any(word in normalized for word in ("логин", "регистрац", "авторизац")):
             return self._generate_auth_html(message)
+        if any(word in normalized for word in ("уведомлен", "notification", "push")):
+            return self._generate_notification_code(message)
+        if any(word in normalized for word in ("рулетк", "roulette")):
+            return self._generate_roulette_html(message)
+        if any(word in normalized for word in ("поиск", "search")):
+            return self._generate_search_html(message)
         if "профил" in normalized:
             return self._generate_profile_html(message)
         if any(word in normalized for word in ("лендинг", "landing")):
@@ -2789,7 +2914,7 @@ if cleaned == "/memory":
             "сгенерируй", "генерируй", "страниц", "сайт", "чат", "логин", "регистрац",
             "авторизац", "админ", "панел", "memory", "профил", "лендинг", "магазин",
             "каталог", "товар", "дашборд", "dashboard", "shop", "landing", "уведомлен",
-            "рулетк", "поиск"
+            "рулетк", "поиск", "postgres", "sql", "schema", "таблиц", "даных", "push", "notification"
         )
         if not any(word in normalized for word in coding_markers):
             return None
