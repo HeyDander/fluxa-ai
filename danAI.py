@@ -1842,6 +1842,67 @@ class SmartChatBot:
             answer += "."
         return self._add_emoji(answer, message)
 
+    def _site_topic_from_message(self, message: str) -> tuple[str, str, str, str]:
+        normalized = normalize(message)
+        original = re.sub(r"\s+", " ", message).strip()
+
+        topic_match = re.search(r"\bпро\s+(.+)$", original, re.IGNORECASE)
+        topic = topic_match.group(1).strip(" .!?") if topic_match else ""
+        if not topic:
+            topic = "танки" if "танк" in normalized else "сайт"
+
+        topic_lower = topic.lower().replace("ё", "е")
+
+        if "90" in topic_lower or "девяност" in topic_lower:
+            return (
+                "90-е",
+                "Атмосфера, музыка, мода и вещи, по которым помнят девяностые.",
+                "linear-gradient(180deg, #120f2b, #3d145c 55%, #ff4f87)",
+                "      <article class=\"card\"><h2>Музыка</h2><p>Кассеты, магнитофоны, евродэнс и первые клипы, которые крутили без остановки.</p></article>\n"
+                "      <article class=\"card\"><h2>Мода</h2><p>Ветровки, джинсовки, яркие лосины, спортивки и смелые кислотные цвета.</p></article>\n"
+                "      <article class=\"card\"><h2>Игры и техника</h2><p>Dendy, Sega, тетрисы, пузатые телевизоры и первые домашние видеомагнитофоны.</p></article>\n"
+            )
+
+        if "танк" in topic_lower:
+            return (
+                "Танки",
+                "История, модели и характеристики боевых машин.",
+                "linear-gradient(180deg, #161922, #20283a)",
+                "      <article class=\"card\"><h2>T-34</h2><p>Средний танк с хорошей подвижностью и наклонной бронёй.</p></article>\n"
+                "      <article class=\"card\"><h2>Tiger I</h2><p>Тяжёлый немецкий танк с мощным орудием и высокой заметностью.</p></article>\n"
+                "      <article class=\"card\"><h2>ИС-2</h2><p>Советский тяжёлый танк, известный сильным орудием и лобовой защитой.</p></article>\n"
+            )
+
+        if "музык" in topic_lower:
+            return (
+                "Музыка",
+                "Подборка жанров, исполнителей и треков, которые задают настроение.",
+                "linear-gradient(180deg, #101522, #1d2c55)",
+                "      <article class=\"card\"><h2>Жанры</h2><p>От рока и хип-хопа до синтвейва и электронной сцены.</p></article>\n"
+                "      <article class=\"card\"><h2>Исполнители</h2><p>Легенды, новые имена и артисты, с которых удобно начать знакомство.</p></article>\n"
+                "      <article class=\"card\"><h2>Плейлисты</h2><p>Утро, работа, дорога и вечер — отдельное настроение под каждый случай.</p></article>\n"
+            )
+
+        if "игр" in topic_lower:
+            return (
+                "Игры",
+                "Игровые жанры, культовые проекты и подборки по настроению.",
+                "linear-gradient(180deg, #12151d, #20374f)",
+                "      <article class=\"card\"><h2>Хиты</h2><p>Игры, которые повлияли на жанр и до сих пор остаются узнаваемыми.</p></article>\n"
+                "      <article class=\"card\"><h2>Жанры</h2><p>Шутеры, RPG, стратегии, гонки и кооперативные приключения.</p></article>\n"
+                "      <article class=\"card\"><h2>Что попробовать</h2><p>Подборка игр для новичков, ностальгии или плотного погружения.</p></article>\n"
+            )
+
+        title = topic[:1].upper() + topic[1:] if topic else "Сайт"
+        return (
+            title,
+            f"Подборка информации и ключевых блоков по теме «{topic}».",
+            "linear-gradient(180deg, #161922, #20283a)",
+            "      <article class=\"card\"><h2>Обзор</h2><p>Короткое введение в тему и главное, что стоит понять с самого начала.</p></article>\n"
+            "      <article class=\"card\"><h2>Ключевые факты</h2><p>Основные идеи, термины или события, без которых тема кажется пустой.</p></article>\n"
+            "      <article class=\"card\"><h2>Почему это интересно</h2><p>Практический смысл, атмосфера или польза, ради которой люди вообще сюда заходят.</p></article>\n"
+        )
+
     def _code_reply(self, message: str) -> str | None:
         normalized = normalize(message)
         if self._looks_like_prompt_injection(message):
@@ -1857,17 +1918,7 @@ class SmartChatBot:
         if any(word in normalized for word in ("сгенерируй", "генерируй", "сделай")) and any(
             word in normalized for word in ("сайт", "страниц", "html")
         ):
-            title = "Танки" if "танк" in normalized else "Сайт"
-            description = "История, модели и характеристики боевых машин." if "танк" in normalized else "Готовая страница."
-            cards = (
-                "      <article class=\"card\"><h2>T-34</h2><p>Средний танк с хорошей подвижностью и наклонной бронёй.</p></article>\n"
-                "      <article class=\"card\"><h2>Tiger I</h2><p>Тяжёлый немецкий танк с мощным орудием и высокой заметностью.</p></article>\n"
-                "      <article class=\"card\"><h2>ИС-2</h2><p>Советский тяжёлый танк, известный сильным орудием и лобовой защитой.</p></article>\n"
-            ) if "танк" in normalized else (
-                "      <article class=\"card\"><h2>Блок 1</h2><p>Короткое описание первого смыслового блока.</p></article>\n"
-                "      <article class=\"card\"><h2>Блок 2</h2><p>Короткое описание второго смыслового блока.</p></article>\n"
-                "      <article class=\"card\"><h2>Блок 3</h2><p>Короткое описание третьего смыслового блока.</p></article>\n"
-            )
+            title, description, background, cards = self._site_topic_from_message(message)
             return (
                 f"Вот готовый стартовый HTML для темы `{title}`:\n\n"
                 "```html\n"
@@ -1879,7 +1930,7 @@ class SmartChatBot:
                 f"  <title>{title}</title>\n"
                 "  <style>\n"
                 "    :root { color-scheme: dark; }\n"
-                "    body { margin: 0; font-family: Arial, sans-serif; background: linear-gradient(180deg, #161922, #20283a); color: #f3f5ff; }\n"
+                f"    body {{ margin: 0; font-family: Arial, sans-serif; background: {background}; color: #f3f5ff; }}\n"
                 "    .hero { padding: 64px 24px 32px; text-align: center; }\n"
                 "    .hero h1 { margin: 0 0 12px; font-size: 48px; }\n"
                 "    .hero p { margin: 0 auto; max-width: 720px; color: #cfd7ff; }\n"
