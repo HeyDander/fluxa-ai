@@ -55,6 +55,7 @@ TOP_K = 5
 MIN_SCORE = 0.17
 RANDOM_SEED = 42
 INDEX_VERSION = 4
+CHAT_MEMORY_LIMIT = 64
 SERPAPI_ENDPOINT = "https://serpapi.com/search.json"
 OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses"
 DATABASE_RUNTIME_ERROR = ""
@@ -2480,7 +2481,7 @@ class SmartChatBot:
             search = self._search_command(f"ищи {implicit_query}")
             if search:
                 self.history.append((cleaned, search))
-                self.history = self.history[-8:]
+                self.history = self.history[-CHAT_MEMORY_LIMIT:]
                 return search
 
         if self.awaiting_search_query:
@@ -2489,80 +2490,80 @@ class SmartChatBot:
             search = self._search_command(f"ищи {query}")
             if search:
                 self.history.append((cleaned, search))
-                self.history = self.history[-8:]
+                self.history = self.history[-CHAT_MEMORY_LIMIT:]
                 return search
 
         search = self._search_command(cleaned)
         if search:
             self.history.append((cleaned, search))
-            self.history = self.history[-8:]
+            self.history = self.history[-CHAT_MEMORY_LIMIT:]
             return search
 
         direct = self._direct_answer(cleaned)
         if direct:
             self.history.append((cleaned, direct))
-            self.history = self.history[-8:]
+            self.history = self.history[-CHAT_MEMORY_LIMIT:]
             return direct
 
         injection_like = self._bot_meta_answer(cleaned) if self._looks_like_prompt_injection(cleaned) else None
         if injection_like:
             self.history.append((cleaned, injection_like))
-            self.history = self.history[-8:]
+            self.history = self.history[-CHAT_MEMORY_LIMIT:]
             return injection_like
 
         if self._force_generation_request(cleaned):
             code_answer = self._code_reply(cleaned)
             if code_answer:
                 self.history.append((cleaned, code_answer))
-                self.history = self.history[-8:]
+                self.history = self.history[-CHAT_MEMORY_LIMIT:]
                 return code_answer
 
             matches = self._best_matches(cleaned)
             answer = self._local_general_answer(cleaned, matches)
             self.history.append((cleaned, answer))
-            self.history = self.history[-8:]
+            self.history = self.history[-CHAT_MEMORY_LIMIT:]
             return answer
 
         code_answer = self._code_reply(cleaned)
         if code_answer:
             self.history.append((cleaned, code_answer))
-            self.history = self.history[-8:]
+            self.history = self.history[-CHAT_MEMORY_LIMIT:]
             return code_answer
 
         local_knowledge = self._local_knowledge_answer(cleaned)
         if local_knowledge:
             self.history.append((cleaned, local_knowledge))
-            self.history = self.history[-8:]
+            self.history = self.history[-CHAT_MEMORY_LIMIT:]
             return local_knowledge
 
         personal = self._personal_reply(cleaned)
         if personal:
             self.history.append((cleaned, personal))
-            self.history = self.history[-8:]
+            self.history = self.history[-CHAT_MEMORY_LIMIT:]
             return personal
 
         meta = self._bot_meta_answer(cleaned)
         if meta:
             self.history.append((cleaned, meta))
-            self.history = self.history[-8:]
+            self.history = self.history[-CHAT_MEMORY_LIMIT:]
             return meta
 
         feature_request = self._feature_request_reply(cleaned)
         if feature_request:
             self.history.append((cleaned, feature_request))
-            self.history = self.history[-8:]
+            self.history = self.history[-CHAT_MEMORY_LIMIT:]
             return feature_request
 
         contextual = self._context_reply(cleaned)
         if contextual:
             self.history.append((cleaned, contextual))
-            self.history = self.history[-8:]
+            self.history = self.history[-CHAT_MEMORY_LIMIT:]
             return contextual
 
         creative = self._generate_creative_reply(cleaned, [])
         if creative:
             self.history.append((cleaned, creative))
-            self.history = self.history[-8:]
+            self.history = self.history[-CHAT_MEMORY_LIMIT:]
             return creative
 
         if matches is None:
@@ -2570,19 +2571,19 @@ class SmartChatBot:
         if not matches or matches[0][0] < MIN_SCORE:
             answer = self._local_general_answer(cleaned, matches)
             self.history.append((cleaned, answer))
-            self.history = self.history[-8:]
+            self.history = self.history[-CHAT_MEMORY_LIMIT:]
             return answer
 
         best_score, best_doc = matches[0]
         if self._should_use_direct_match(cleaned, matches[0]):
             answer = self._add_emoji(best_doc["bot"], cleaned)
             self.history.append((cleaned, answer))
-            self.history = self.history[-8:]
+            self.history = self.history[-CHAT_MEMORY_LIMIT:]
             return answer
 
         answer = self._local_general_answer(cleaned, matches)
         self.history.append((cleaned, answer))
-        self.history = self.history[-8:]
+        self.history = self.history[-CHAT_MEMORY_LIMIT:]
         return answer
 
 
