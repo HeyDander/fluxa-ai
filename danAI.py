@@ -1805,8 +1805,51 @@ class SmartChatBot:
 
     def _code_reply(self, message: str) -> str | None:
         normalized = normalize(message)
-        if not any(word in normalized for word in ("код", "python", "js", "javascript", "html", "css", "flask", "fastapi", "telegram bot", "бот")):
+        coding_markers = (
+            "код", "python", "js", "javascript", "html", "css", "flask", "fastapi",
+            "telegram bot", "бот", "функц", "команд", "api", "файл", "user_memory", "/memory"
+        )
+        if not any(word in normalized for word in coding_markers):
             return None
+
+        if ("user_memory" in normalized or "/memory" in normalized or "записывал каждое сообщение" in normalized) and any(
+            marker in normalized for marker in ("бот", "файл", "model_store", "memory")
+        ):
+            return (
+                "Да, это уже похоже на конкретную задачу по коду. Я бы сделал так:\n\n"
+                "1. После каждого сообщения пользователя дописывал строку в `model_store/user_memory.txt`.\n"
+                "2. Добавил команду `/memory`, которая читает последние 5 строк или 5 записей.\n"
+                "3. Вынес это в две функции: запись и чтение памяти.\n\n"
+                "Минимальный вариант на Python:\n\n"
+                "```python\n"
+                "from pathlib import Path\n\n"
+                "MEMORY_FILE = Path('model_store/user_memory.txt')\n\n"
+                "def append_user_memory(text: str) -> None:\n"
+                "    MEMORY_FILE.parent.mkdir(parents=True, exist_ok=True)\n"
+                "    with MEMORY_FILE.open('a', encoding='utf-8') as f:\n"
+                "        f.write(text.strip() + '\\n')\n\n"
+                "def last_memory(limit: int = 5) -> list[str]:\n"
+                "    if not MEMORY_FILE.exists():\n"
+                "        return []\n"
+                "    lines = MEMORY_FILE.read_text(encoding='utf-8').splitlines()\n"
+                "    return lines[-limit:]\n"
+                "```\n\n"
+                "А в логике бота:\n"
+                "```python\n"
+                "if message.strip() == '/memory':\n"
+                "    return '\\n'.join(last_memory(5)) or 'Память пока пуста.'\n\n"
+                "append_user_memory(message)\n"
+                "```\n\n"
+                "Если хочешь, я могу дальше научить его генерировать именно такие проектные куски кода чаще, а не падать в общий шаблон."
+            )
+
+        if normalized.startswith(("сделай ", "добавь ", "измени ", "почини ")) and any(
+            marker in normalized for marker in ("бот", "сайт", "чат", "функц", "кнопк", "команд", "файл", "api")
+        ):
+            return (
+                "Это уже конкретная задача по проекту. Нормальный ответ тут такой: сначала определить, где именно меняется логика, потом какие данные нужны, потом какой минимальный код закрывает сценарий.\n\n"
+                "Если коротко: опиши желаемое поведение, входные данные, где это должно жить и что должно вернуться на выходе. Тогда я смогу сгенерировать уже не общую болтовню, а нормальный кусок реализации."
+            )
 
         if "telegram" in normalized and "python" in normalized:
             return (
