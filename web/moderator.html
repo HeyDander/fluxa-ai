@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>fluxa-ai moderator</title>
+    <link rel="stylesheet" href="./moderator.css" />
+  </head>
+  <body>
+    <div class="admin-shell">
+      <aside class="admin-sidebar">
+        <div class="admin-brand">
+          <p class="kicker">fluxa-ai</p>
+          <h1>Moderator</h1>
+          <p class="muted">Очередь действий для подтверждения админом</p>
+        </div>
+
+        <div class="admin-card">
+          <div id="moderator-status" class="muted">Нет подключения</div>
+          <button id="refresh-moderator" class="admin-button hidden">Обновить</button>
+          <button id="moderator-logout" class="admin-button ghost hidden">Выйти</button>
+        </div>
+      </aside>
+
+      <main class="admin-main">
+        <section id="moderator-login-view" class="panel">
+          <p class="kicker">Moderator Access</p>
+          <h2>Подключение к сайту</h2>
+          <form id="moderator-login-form" class="admin-form">
+            <label>
+              <span>API URL</span>
+              <input id="moderator-api-url" type="text" placeholder="https://твойдомен.up.railway.app" />
+            </label>
+            <label>
+              <span>Moderator key</span>
+              <input id="moderator-api-key" type="password" placeholder="MODERATOR_API_KEY" />
+            </label>
+            <button class="admin-button" type="submit">Подключить</button>
+          </form>
+          <p id="moderator-login-error" class="error-text"></p>
+        </section>
+
+        <section id="moderator-dashboard" class="hidden">
+          <div class="panel panel-row">
+            <div>
+              <p class="kicker">Moderator Queue</p>
+              <h2>Пользователи</h2>
+            </div>
+            <div class="panel-actions">
+              <button id="moderator-global-chat-button" class="admin-button ghost" type="button">Общий чат</button>
+              <input id="moderator-user-search" class="search-input" type="text" placeholder="Поиск по логину" />
+            </div>
+          </div>
+
+          <div class="panel">
+            <div id="moderator-users-summary" class="muted">Пользователей: 0</div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-row">
+              <div>
+                <p class="kicker">Requests</p>
+                <h3>Мои заявки</h3>
+              </div>
+              <div id="moderator-requests-summary" class="muted">Пока пусто</div>
+            </div>
+            <div id="moderator-requests-list" class="request-list"></div>
+          </div>
+
+          <section class="admin-grid">
+            <section id="moderator-users-list" class="users-grid"></section>
+
+            <section id="moderator-selected-panel" class="panel hidden">
+              <p class="kicker">Moderator Action</p>
+              <h2 id="moderator-selected-username">Пользователь</h2>
+              <div id="moderator-selected-meta" class="muted"></div>
+
+              <div id="moderator-selected-chat" class="selected-chat"></div>
+
+              <form id="moderator-operator-form" class="admin-form">
+                <label>
+                  <span>Сообщение от поддержки</span>
+                  <textarea id="moderator-operator-message" rows="5" placeholder="Сообщение, которое уйдёт в заявку"></textarea>
+                </label>
+                <button class="admin-button" type="submit">Запросить отправку</button>
+              </form>
+
+              <div class="moderator-actions">
+                <label class="admin-form compact">
+                  <span>Кредиты</span>
+                  <input id="moderator-grant-input" class="grant-input" type="number" min="1" step="1" value="400" />
+                </label>
+                <button id="moderator-grant-button" class="admin-button" type="button">Запросить выдачу</button>
+                <button id="moderator-ban-button" class="admin-button ghost" type="button">Запросить бан / разбан</button>
+                <button id="moderator-temp-ban-button" class="admin-button ghost" type="button">Запросить временный бан</button>
+                <button id="moderator-delete-user-button" class="admin-button ghost" type="button">Запросить удаление</button>
+              </div>
+
+              <p id="moderator-operator-error" class="error-text"></p>
+            </section>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script src="./moderator.js"></script>
+  </body>
+</html>

@@ -1,0 +1,71 @@
+@import "./admin.css";
+
+.request-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.request-card {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 14px 16px;
+  background: rgba(123, 77, 255, 0.05);
+  display: grid;
+  gap: 8px;
+}
+
+.request-card.pending {
+  border-color: rgba(255, 160, 54, 0.28);
+}
+
+.request-card.approved {
+  border-color: rgba(46, 204, 113, 0.28);
+}
+
+.request-card.rejected {
+  border-color: rgba(255, 96, 136, 0.28);
+}
+
+.request-meta {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  width: fit-content;
+}
+
+.status-chip.pending {
+  background: rgba(255, 160, 54, 0.14);
+  color: #b06a00;
+}
+
+.status-chip.approved {
+  background: rgba(46, 204, 113, 0.14);
+  color: #18854a;
+}
+
+.status-chip.rejected {
+  background: rgba(255, 96, 136, 0.14);
+  color: #b02b57;
+}
+
+.moderator-actions {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+
+.admin-form.compact {
+  margin-top: 0;
+}

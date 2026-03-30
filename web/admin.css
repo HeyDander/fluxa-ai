@@ -58,6 +58,16 @@ body {
   padding: 22px;
 }
 
+.pending-badge {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 160, 54, 0.14);
+  color: #b06a00;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .panel-row {
   display: flex;
   align-items: center;
@@ -198,6 +208,70 @@ body {
   color: var(--accent);
   font-size: 13px;
   font-weight: 800;
+}
+
+.request-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.request-card {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 14px 16px;
+  background: rgba(123, 77, 255, 0.05);
+  display: grid;
+  gap: 10px;
+}
+
+.request-card.pending {
+  border-color: rgba(255, 160, 54, 0.28);
+}
+
+.request-card.approved {
+  border-color: rgba(46, 204, 113, 0.28);
+}
+
+.request-card.rejected {
+  border-color: rgba(255, 96, 136, 0.28);
+}
+
+.request-meta {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.request-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  width: fit-content;
+}
+
+.status-chip.pending {
+  background: rgba(255, 160, 54, 0.14);
+  color: #b06a00;
+}
+
+.status-chip.approved {
+  background: rgba(46, 204, 113, 0.14);
+  color: #18854a;
+}
+
+.status-chip.rejected {
+  background: rgba(255, 96, 136, 0.14);
+  color: #b02b57;
 }
 
 .selected-chat {

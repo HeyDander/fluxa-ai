@@ -6,10 +6,13 @@ const apiUrlInput = document.getElementById("admin-api-url");
 const apiKeyInput = document.getElementById("admin-api-key");
 const usersList = document.getElementById("users-list");
 const adminStatus = document.getElementById("admin-status");
+const adminPendingBadge = document.getElementById("admin-pending-badge");
 const refreshUsersButton = document.getElementById("refresh-users");
 const adminLogoutButton = document.getElementById("admin-logout");
 const userSearch = document.getElementById("user-search");
 const usersSummary = document.getElementById("users-summary");
+const moderationSummary = document.getElementById("moderation-summary");
+const moderationRequests = document.getElementById("moderation-requests");
 const selectedUserPanel = document.getElementById("selected-user-panel");
 const selectedUsername = document.getElementById("selected-username");
 const selectedUserMeta = document.getElementById("selected-user-meta");
@@ -31,6 +34,8 @@ let usersRequestInFlight = false;
 let grantAmountDraft = localStorage.getItem("fluxa_admin_grant_amount") || "400";
 let lastGrantUsername = "";
 let lastGrantAmount = 0;
+let allModerationRequests = [];
+let lastPendingRequestCount = 0;
 const MAX_GRANT_AMOUNT = 1_000_000_000_000;
 
 const FUN_ACTIONS = [
@@ -115,6 +120,10 @@ function setAdminState(connected) {
   refreshUsersButton.classList.toggle("hidden", !connected);
   adminLogoutButton.classList.toggle("hidden", !connected);
   adminStatus.textContent = connected ? `Подключено к: ${apiBaseUrl}` : "Нет подключения";
+  adminPendingBadge.classList.toggle("hidden", !connected || lastPendingRequestCount === 0);
+  if (!connected) {
+    adminPendingBadge.textContent = "0 новых заявок";
+  }
 }
 
 function stopLiveUsersSync() {
@@ -127,7 +136,7 @@ function stopLiveUsersSync() {
 function startLiveUsersSync() {
   stopLiveUsersSync();
   liveUsersTimer = setInterval(() => {
-    void loadUsers(true);
+    void Promise.all([loadUsers(true), loadModerationRequests(true)]);
   }, 2000);
 }
 
@@ -263,6 +272,102 @@ function renderUsers(users) {
     actions.append(grantInput, grantButton, banButton, tempBanButton, deleteUserButton);
     card.append(titleRow, stats, actions, history);
     usersList.appendChild(card);
+  }
+}
+
+function maybeNotifyAboutRequests(pendingCount) {
+  if (pendingCount <= lastPendingRequestCount) {
+    lastPendingRequestCount = pendingCount;
+    return;
+  }
+  lastPendingRequestCount = pendingCount;
+  if (!("Notification" in window)) {
+    return;
+  }
+  if (Notification.permission === "default") {
+    Notification.requestPermission().catch(() => {});
+    return;
+  }
+  if (Notification.permission !== "granted") {
+    return;
+  }
+  new Notification("Новая заявка модератора", {
+    body: `В очереди ${pendingCount} заявок на проверку`,
+  });
+}
+
+function renderModerationRequests(items) {
+  allModerationRequests = items;
+  moderationRequests.innerHTML = "";
+  const pendingCount = items.filter((item) => item.status === "pending").length;
+  moderationSummary.textContent = items.length ? `Всего: ${items.length} · В ожидании: ${pendingCount}` : "Пока пусто";
+  adminPendingBadge.textContent = pendingCount > 0 ? `${pendingCount} новых заявок` : "0 новых заявок";
+  adminPendingBadge.classList.toggle("hidden", pendingCount === 0);
+  maybeNotifyAboutRequests(pendingCount);
+
+  for (const item of items) {
+    const card = document.createElement("article");
+    card.className = `request-card ${item.status}`;
+
+    const status = document.createElement("div");
+    status.className = `status-chip ${item.status}`;
+    status.textContent = item.status === "pending" ? "Ждёт решения" : item.status === "approved" ? "Одобрено" : "Отклонено";
+
+    const summary = document.createElement("div");
+    summary.innerHTML = `<strong>${item.summary}</strong>`;
+
+    const meta = document.createElement("div");
+    meta.className = "request-meta";
+    meta.textContent = item.reviewed_at
+      ? `${item.created_at} · ${item.requester} · ${item.reviewed_at} · ${item.reviewed_by || "admin"}`
+      : `${item.created_at} · ${item.requester}`;
+
+    card.append(status, summary, meta);
+
+    if (item.note) {
+      const note = document.createElement("div");
+      note.className = "request-meta";
+      note.textContent = item.note;
+      card.append(note);
+    }
+
+    if (item.status === "pending") {
+      const actions = document.createElement("div");
+      actions.className = "request-actions";
+
+      const approveButton = document.createElement("button");
+      approveButton.type = "button";
+      approveButton.className = "admin-button";
+      approveButton.textContent = "Одобрить";
+      approveButton.addEventListener("click", async () => {
+        try {
+          await request("/api/admin/moderation-requests/approve", { request_id: item.id });
+          await loadModerationRequests();
+          await loadUsers(true);
+        } catch (error) {
+          loginError.textContent = error.message;
+        }
+      });
+
+      const rejectButton = document.createElement("button");
+      rejectButton.type = "button";
+      rejectButton.className = "admin-button ghost";
+      rejectButton.textContent = "Отклонить";
+      rejectButton.addEventListener("click", async () => {
+        const note = window.prompt("Причина отклонения", "");
+        try {
+          await request("/api/admin/moderation-requests/reject", { request_id: item.id, note: (note || "").trim() });
+          await loadModerationRequests();
+        } catch (error) {
+          loginError.textContent = error.message;
+        }
+      });
+
+      actions.append(approveButton, rejectButton);
+      card.append(actions);
+    }
+
+    moderationRequests.appendChild(card);
   }
 }
 
@@ -407,6 +512,18 @@ function renderFunActions() {
   }
 }
 
+async function loadModerationRequests(silent = false) {
+  try {
+    const data = await request("/api/admin/moderation-requests");
+    renderModerationRequests(data.items || []);
+  } catch (error) {
+    if (!silent) {
+      loginError.textContent = error.message;
+      throw error;
+    }
+  }
+}
+
 async function loadUsers(silent = false) {
   if (usersRequestInFlight) {
     return;
@@ -439,7 +556,7 @@ async function boot() {
   try {
     await request("/api/admin/me");
     setAdminState(true);
-    await loadUsers();
+    await Promise.all([loadUsers(), loadModerationRequests()]);
     startLiveUsersSync();
   } catch (error) {
     setAdminState(false);
@@ -464,14 +581,16 @@ loginForm.addEventListener("submit", async (event) => {
   try {
     await request("/api/admin/me");
     setAdminState(true);
-    await loadUsers();
+    await Promise.all([loadUsers(), loadModerationRequests()]);
     startLiveUsersSync();
   } catch (error) {
     loginError.textContent = error.message;
   }
 });
 
-refreshUsersButton.addEventListener("click", loadUsers);
+refreshUsersButton.addEventListener("click", () => {
+  void Promise.all([loadUsers(), loadModerationRequests()]);
+});
 globalChatAdminButton.addEventListener("click", () => {
   void openGlobalChatPanel();
 });
@@ -485,10 +604,13 @@ adminLogoutButton.addEventListener("click", () => {
   apiUrlInput.value = "";
   apiKeyInput.value = "";
   usersList.innerHTML = "";
+  moderationRequests.innerHTML = "";
   selectedUserPanel.classList.add("hidden");
   selectedChat.innerHTML = "";
   activeUsername = "";
   activePanelMode = "user";
+  allModerationRequests = [];
+  lastPendingRequestCount = 0;
   setAdminState(false);
 });
 userSearch.addEventListener("input", () => renderUsers(allUsers));

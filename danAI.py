@@ -51,6 +51,7 @@ USERS_FILE = MODEL_DIR / "users.json"
 CHATS_FILE = MODEL_DIR / "chats.json"
 SESSIONS_FILE = MODEL_DIR / "sessions.json"
 ADMIN_SESSIONS_FILE = MODEL_DIR / "admin_sessions.json"
+MODERATION_REQUESTS_FILE = MODEL_DIR / "moderation_requests.json"
 PROMOS_FILE = MODEL_DIR / "promos.json"
 GLOBAL_CHAT_KEY = "__global__"
 WORDS_DB_FILE = Path("data/ru_RU.dic")
@@ -1042,6 +1043,14 @@ def admin_api_key() -> str:
     return os.getenv("ADMIN_API_KEY", "").strip()
 
 
+def moderator_name() -> str:
+    return os.getenv("MODERATOR_NAME", "moderator").strip() or "moderator"
+
+
+def moderator_api_key() -> str:
+    return os.getenv("MODERATOR_API_KEY", "").strip()
+
+
 def vapid_public_key() -> str:
     return os.getenv("VAPID_PUBLIC_KEY", "").strip()
 
@@ -1210,6 +1219,17 @@ def load_admin_sessions(path: Path = ADMIN_SESSIONS_FILE) -> dict:
 
 def save_admin_sessions(sessions: dict, path: Path = ADMIN_SESSIONS_FILE) -> None:
     save_state("admin_sessions", sessions, path)
+
+
+def load_moderation_requests(path: Path = MODERATION_REQUESTS_FILE) -> dict:
+    state = load_state("moderation_requests", path)
+    state.setdefault("next_id", 1)
+    state.setdefault("items", [])
+    return state
+
+
+def save_moderation_requests(state: dict, path: Path = MODERATION_REQUESTS_FILE) -> None:
+    save_state("moderation_requests", state, path)
 
 
 def load_promos(path: Path = PROMOS_FILE) -> dict:
@@ -3695,14 +3715,17 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
         def _is_admin_api_path(self) -> bool:
             return self.path.startswith("/api/admin/")
 
+        def _is_moderator_api_path(self) -> bool:
+            return self.path.startswith("/api/moderator/")
+
         def _cors_headers(self) -> dict[str, str]:
-            if not self._is_admin_api_path():
+            if not self._is_admin_api_path() and not self._is_moderator_api_path():
                 return {}
             origin = self.headers.get("Origin", "*")
             return {
                 "Access-Control-Allow-Origin": origin if origin else "*",
                 "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type, X-Admin-Key",
+                "Access-Control-Allow-Headers": "Content-Type, X-Admin-Key, X-Moderator-Key",
                 "Access-Control-Allow-Credentials": "true",
                 "Vary": "Origin",
             }
@@ -3736,6 +3759,12 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
 
         def _save_promos(self, promos: dict) -> None:
             save_promos(promos)
+
+        def _load_moderation_requests(self) -> dict:
+            return load_moderation_requests()
+
+        def _save_moderation_requests(self, state: dict) -> None:
+            save_moderation_requests(state)
 
         def _is_secure_request(self) -> bool:
             forwarded_proto = self.headers.get("X-Forwarded-Proto", "").strip().lower()
@@ -3815,11 +3844,202 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
             sessions = self._load_admin_sessions()
             return sessions.get(token) == admin_username()
 
+        def _is_moderator(self) -> bool:
+            request_key = self.headers.get("X-Moderator-Key", "").strip()
+            configured_key = moderator_api_key()
+            return bool(configured_key and secrets.compare_digest(request_key, configured_key))
+
         def _require_admin(self) -> bool:
             if self._is_admin():
                 return True
             self._send_json({"error": "Нужен вход в админ-панель."}, status=401)
             return False
+
+        def _require_moderator(self) -> bool:
+            if self._is_moderator():
+                return True
+            self._send_json({"error": "Нужен вход в панель модератора."}, status=401)
+            return False
+
+        def _moderation_request_summary(self, item: dict) -> str:
+            action = item.get("action", "")
+            target = item.get("target_username", "")
+            payload = item.get("payload", {}) if isinstance(item.get("payload"), dict) else {}
+            if action == "grant_credits":
+                return f"Выдать {payload.get('amount', 0)} кр. пользователю {target}"
+            if action == "toggle_ban":
+                return f"Переключить бан для {target}"
+            if action == "ban_temporary":
+                return f"Временный бан {target} на {payload.get('minutes', 0)} мин."
+            if action == "delete_user":
+                return f"Удалить пользователя {target}"
+            if action == "send_message":
+                return f"Отправить сообщение поддержки пользователю {target}"
+            if action == "global_chat_send_message":
+                return "Отправить сообщение поддержки в общий чат"
+            if action == "global_chat_edit_message":
+                return f"Изменить сообщение #{payload.get('chat_index', '?')} в общем чате"
+            if action == "global_chat_delete_message":
+                return f"Удалить сообщение #{payload.get('chat_index', '?')} в общем чате"
+            return action or "Неизвестное действие"
+
+        def _serialize_moderation_request(self, item: dict) -> dict:
+            payload = item.get("payload", {}) if isinstance(item.get("payload"), dict) else {}
+            return {
+                "id": int(item.get("id", 0)),
+                "requester": item.get("requester", moderator_name()),
+                "status": item.get("status", "pending"),
+                "action": item.get("action", ""),
+                "target_username": item.get("target_username", ""),
+                "payload": payload,
+                "summary": item.get("summary", self._moderation_request_summary(item)),
+                "created_at": item.get("created_at", ""),
+                "reviewed_at": item.get("reviewed_at", ""),
+                "reviewed_by": item.get("reviewed_by", ""),
+                "note": item.get("note", ""),
+            }
+
+        def _create_moderation_request(self, action: str, target_username: str = "", payload: dict | None = None) -> dict:
+            state = self._load_moderation_requests()
+            item = {
+                "id": int(state.get("next_id", 1)),
+                "requester": moderator_name(),
+                "status": "pending",
+                "action": action,
+                "target_username": target_username,
+                "payload": payload or {},
+                "created_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "reviewed_at": "",
+                "reviewed_by": "",
+                "note": "",
+            }
+            item["summary"] = self._moderation_request_summary(item)
+            state["next_id"] = item["id"] + 1
+            state.setdefault("items", []).insert(0, item)
+            state["items"] = state["items"][:300]
+            self._save_moderation_requests(state)
+            return item
+
+        def _apply_moderation_request(self, item: dict) -> tuple[bool, str]:
+            action = item.get("action", "")
+            payload = item.get("payload", {}) if isinstance(item.get("payload"), dict) else {}
+            username = str(item.get("target_username", "")).strip()
+
+            if action == "grant_credits":
+                amount = int(payload.get("amount", 0))
+                if not username or amount == 0:
+                    return False, "Нужны логин и число кредитов."
+                users = self._load_users()
+                user = users.get(username)
+                if not user:
+                    return False, "Пользователь не найден."
+                ensure_user_record(username, users)
+                user["credits"] = user.get("credits", DEFAULT_CREDITS) + amount
+                record_credit_event(user, amount, "Начисление" if amount > 0 else "Списание", "Одобрено через модератора")
+                self._save_users(users)
+                return True, ""
+
+            if action == "toggle_ban":
+                if not username:
+                    return False, "Нужен логин."
+                users = self._load_users()
+                user = users.get(username)
+                if not user:
+                    return False, "Пользователь не найден."
+                ensure_user_record(username, users)
+                user["banned"] = not user.get("banned", False)
+                if not user["banned"]:
+                    user["banned_until"] = ""
+                self._save_users(users)
+                return True, ""
+
+            if action == "ban_temporary":
+                minutes = int(payload.get("minutes", 0))
+                if not username or minutes <= 0:
+                    return False, "Нужны логин и число минут."
+                users = self._load_users()
+                user = users.get(username)
+                if not user:
+                    return False, "Пользователь не найден."
+                ensure_user_record(username, users)
+                user["banned"] = False
+                user["banned_until"] = (dt.datetime.now() + dt.timedelta(minutes=minutes)).isoformat(timespec="minutes")
+                self._save_users(users)
+                return True, ""
+
+            if action == "delete_user":
+                if not username:
+                    return False, "Нужен логин пользователя."
+                users = self._load_users()
+                if username not in users:
+                    return False, "Пользователь не найден."
+                users.pop(username, None)
+                self._save_users(users)
+                chats = self._load_chats()
+                chats.pop(username, None)
+                self._save_chats(chats)
+                sessions = {token: value for token, value in self._load_sessions().items() if value != username}
+                self._save_sessions(sessions)
+                promos = self._load_promos()
+                for promo in promos.values():
+                    promo["used_by"] = [value for value in promo.get("used_by", []) if value != username]
+                self._save_promos(promos)
+                return True, ""
+
+            if action == "send_message":
+                text = str(payload.get("text", "")).strip()
+                if not username or not text:
+                    return False, "Нужны логин и текст."
+                users = self._load_users()
+                if username not in users:
+                    return False, "Пользователь не найден."
+                chats = self._load_chats()
+                chats.setdefault(username, []).append({"role": "bot", "text": f"(fluxa-ai support) {text}"})
+                chats[username] = chats[username][-100:]
+                self._save_chats(chats)
+                return True, ""
+
+            if action == "global_chat_send_message":
+                text = str(payload.get("text", "")).strip()
+                if not text:
+                    return False, "Нужен текст."
+                chats = self._load_chats()
+                chats.setdefault(GLOBAL_CHAT_KEY, []).append({"role": "bot", "text": text, "author": "fluxa-ai support"})
+                chats[GLOBAL_CHAT_KEY] = chats[GLOBAL_CHAT_KEY][-200:]
+                users = self._load_users()
+                if notify_global_chat_users(users, None, "fluxa-ai support", text, event_type="system"):
+                    self._save_users(users)
+                self._save_chats(chats)
+                return True, ""
+
+            if action == "global_chat_edit_message":
+                text = str(payload.get("text", "")).strip()
+                chat_index = payload.get("chat_index")
+                if not text or not isinstance(chat_index, int):
+                    return False, "Нужны индекс и новый текст."
+                chats = self._load_chats()
+                history = chats.get(GLOBAL_CHAT_KEY, [])
+                if chat_index < 0 or chat_index >= len(history):
+                    return False, "Сообщение не найдено."
+                history[chat_index]["text"] = text
+                chats[GLOBAL_CHAT_KEY] = history
+                self._save_chats(chats)
+                return True, ""
+
+            if action == "global_chat_delete_message":
+                chat_index = payload.get("chat_index")
+                if not isinstance(chat_index, int):
+                    return False, "Нужен индекс сообщения."
+                chats = self._load_chats()
+                history = chats.get(GLOBAL_CHAT_KEY, [])
+                if chat_index < 0 or chat_index >= len(history):
+                    return False, "Сообщение не найдено."
+                history.pop(chat_index)
+                chats[GLOBAL_CHAT_KEY] = history
+                self._save_chats(chats)
+                return True, ""
+
+            return False, "Неизвестное действие."
 
         def do_OPTIONS(self) -> None:
             self.send_response(HTTPStatus.NO_CONTENT)
@@ -3854,14 +4074,20 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 return self._send_file(web_dir / "index.html", "text/html; charset=utf-8")
             if request_path == "/admin":
                 return self._send_file(web_dir / "admin.html", "text/html; charset=utf-8")
+            if request_path == "/moderator":
+                return self._send_file(web_dir / "moderator.html", "text/html; charset=utf-8")
             if request_path == "/app.js":
                 return self._send_file(web_dir / "app.js", "application/javascript; charset=utf-8")
             if request_path == "/admin.js":
                 return self._send_file(web_dir / "admin.js", "application/javascript; charset=utf-8")
+            if request_path == "/moderator.js":
+                return self._send_file(web_dir / "moderator.js", "application/javascript; charset=utf-8")
             if request_path == "/styles.css":
                 return self._send_file(web_dir / "styles.css", "text/css; charset=utf-8")
             if request_path == "/admin.css":
                 return self._send_file(web_dir / "admin.css", "text/css; charset=utf-8")
+            if request_path == "/moderator.css":
+                return self._send_file(web_dir / "moderator.css", "text/css; charset=utf-8")
             if request_path == "/sw.js":
                 return self._send_file(web_dir / "sw.js", "application/javascript; charset=utf-8")
             if request_path == "/privacy":
@@ -3881,7 +4107,9 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
             if request_path == "/api/push/config":
                 return self._send_json({"enabled": push_enabled(), "public_key": vapid_public_key()})
             if request_path == "/api/admin/me":
-                return self._send_json({"ok": self._is_admin(), "admin": admin_username() if self._is_admin() else None})
+                requests_state = self._load_moderation_requests()
+                pending = sum(1 for item in requests_state.get("items", []) if item.get("status") == "pending")
+                return self._send_json({"ok": self._is_admin(), "admin": admin_username() if self._is_admin() else None, "pending_requests": pending})
             if request_path == "/api/admin/global-chat":
                 if not self._require_admin():
                     return
@@ -3920,6 +4148,55 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                         }
                     )
                 return self._send_json({"users": payload})
+            if request_path == "/api/admin/moderation-requests":
+                if not self._require_admin():
+                    return
+                state = self._load_moderation_requests()
+                items = [self._serialize_moderation_request(item) for item in state.get("items", [])]
+                pending = sum(1 for item in items if item.get("status") == "pending")
+                return self._send_json({"items": items, "pending": pending})
+            if request_path == "/api/moderator/me":
+                return self._send_json({"ok": self._is_moderator(), "moderator": moderator_name() if self._is_moderator() else None})
+            if request_path == "/api/moderator/users":
+                if not self._require_moderator():
+                    return
+                users = self._load_users()
+                payload = []
+                for username, user in sorted(users.items()):
+                    ensure_user_record(username, users)
+                    payload.append(
+                        {
+                            "username": username,
+                            "credits": user.get("credits", DEFAULT_CREDITS),
+                            "referrals": user.get("referrals", 0),
+                            "banned": is_user_banned(user),
+                            "banned_until": user.get("banned_until", ""),
+                            "messages_sent": user.get("stats", {}).get("messages_sent", 0),
+                            "searches_used": user.get("stats", {}).get("searches_used", 0),
+                        }
+                    )
+                return self._send_json({"users": payload})
+            if request_path == "/api/moderator/global-chat":
+                if not self._require_moderator():
+                    return
+                chats = self._load_chats()
+                history = chats.get(GLOBAL_CHAT_KEY, [])
+                payload = [
+                    {
+                        "chat_index": index,
+                        "role": item.get("role", "bot"),
+                        "text": item.get("text", ""),
+                        "author": item.get("author", ""),
+                    }
+                    for index, item in enumerate(history)
+                ]
+                return self._send_json({"history": payload})
+            if request_path == "/api/moderator/requests":
+                if not self._require_moderator():
+                    return
+                state = self._load_moderation_requests()
+                items = [self._serialize_moderation_request(item) for item in state.get("items", []) if item.get("requester") == moderator_name()]
+                return self._send_json({"items": items})
             self.send_error(HTTPStatus.NOT_FOUND)
 
         def do_POST(self) -> None:
@@ -4088,6 +4365,53 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                     {"ok": True},
                     headers={"Set-Cookie": self._build_session_cookie("fluxa_ai_admin_session", "", clear=True)},
                 )
+
+            if self.path == "/api/admin/moderation-requests/approve":
+                if not self._require_admin():
+                    return
+                payload = self._read_json()
+                if payload is None:
+                    return self._send_json({"error": "Invalid JSON"}, status=400)
+                request_id = int(payload.get("request_id", 0) or 0)
+                if request_id <= 0:
+                    return self._send_json({"error": "Нужен request_id."}, status=400)
+                state = self._load_moderation_requests()
+                item = next((entry for entry in state.get("items", []) if int(entry.get("id", 0)) == request_id), None)
+                if not item:
+                    return self._send_json({"error": "Запрос не найден."}, status=404)
+                if item.get("status") != "pending":
+                    return self._send_json({"error": "Запрос уже обработан."}, status=400)
+                ok, error_message = self._apply_moderation_request(item)
+                if not ok:
+                    return self._send_json({"error": error_message}, status=400)
+                item["status"] = "approved"
+                item["reviewed_at"] = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+                item["reviewed_by"] = admin_username()
+                item["note"] = str(payload.get("note", "")).strip()
+                self._save_moderation_requests(state)
+                return self._send_json({"ok": True})
+
+            if self.path == "/api/admin/moderation-requests/reject":
+                if not self._require_admin():
+                    return
+                payload = self._read_json()
+                if payload is None:
+                    return self._send_json({"error": "Invalid JSON"}, status=400)
+                request_id = int(payload.get("request_id", 0) or 0)
+                if request_id <= 0:
+                    return self._send_json({"error": "Нужен request_id."}, status=400)
+                state = self._load_moderation_requests()
+                item = next((entry for entry in state.get("items", []) if int(entry.get("id", 0)) == request_id), None)
+                if not item:
+                    return self._send_json({"error": "Запрос не найден."}, status=404)
+                if item.get("status") != "pending":
+                    return self._send_json({"error": "Запрос уже обработан."}, status=400)
+                item["status"] = "rejected"
+                item["reviewed_at"] = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+                item["reviewed_by"] = admin_username()
+                item["note"] = str(payload.get("note", "")).strip()
+                self._save_moderation_requests(state)
+                return self._send_json({"ok": True})
 
             if self.path == "/api/admin/grant-credits":
                 if not self._require_admin():
@@ -4260,6 +4584,32 @@ def make_handler(bot: SmartChatBot, web_dir: Path):
                 chats[GLOBAL_CHAT_KEY] = history
                 self._save_chats(chats)
                 return self._send_json({"ok": True})
+
+            if self.path == "/api/moderator/request":
+                if not self._require_moderator():
+                    return
+                payload = self._read_json()
+                if payload is None:
+                    return self._send_json({"error": "Invalid JSON"}, status=400)
+                action = str(payload.get("action", "")).strip()
+                target_username = str(payload.get("target_username", "")).strip()
+                request_payload = payload.get("payload", {})
+                if not isinstance(request_payload, dict):
+                    request_payload = {}
+                allowed_actions = {
+                    "grant_credits",
+                    "toggle_ban",
+                    "ban_temporary",
+                    "delete_user",
+                    "send_message",
+                    "global_chat_send_message",
+                    "global_chat_edit_message",
+                    "global_chat_delete_message",
+                }
+                if action not in allowed_actions:
+                    return self._send_json({"error": "Недопустимое действие."}, status=400)
+                item = self._create_moderation_request(action, target_username=target_username, payload=request_payload)
+                return self._send_json({"ok": True, "item": self._serialize_moderation_request(item)})
 
             if self.path == "/api/tasks/claim":
                 current = self._current_user()

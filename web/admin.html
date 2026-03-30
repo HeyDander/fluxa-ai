@@ -17,6 +17,7 @@
 
         <div class="admin-card">
           <div id="admin-status" class="muted">Нет входа</div>
+          <div id="admin-pending-badge" class="pending-badge hidden">0 новых заявок</div>
           <button id="refresh-users" class="admin-button hidden">Обновить</button>
           <button id="admin-logout" class="admin-button ghost hidden">Выйти</button>
         </div>
@@ -54,6 +55,17 @@
 
           <div class="panel">
             <div id="users-summary" class="muted">Пользователей: 0</div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-row">
+              <div>
+                <p class="kicker">Moderator Queue</p>
+                <h3>Заявки модератора</h3>
+              </div>
+              <div id="moderation-summary" class="muted">Пока пусто</div>
+            </div>
+            <div id="moderation-requests" class="request-list"></div>
           </div>
 
           <section class="admin-grid">
