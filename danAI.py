@@ -66,7 +66,7 @@ CHAT_MEMORY_LIMIT = 10
 SERPAPI_ENDPOINT = "https://serpapi.com/search.json"
 OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses"
 DATABASE_RUNTIME_ERROR = ""
-LOCAL_ONLY_REPLIES = False
+LOCAL_ONLY_REPLIES = True
 
 STOPWORDS = {
     "а",
@@ -1971,52 +1971,100 @@ class SmartChatBot:
             return cleaned
         return cleaned[0].upper() + cleaned[1:]
 
-    def _theme_palette(self, topic: str) -> dict[str, str]:
-        digest = hashlib.sha256(topic.encode("utf-8")).hexdigest()
-        seed = int(digest[:8], 16)
-        hue = seed % 360
-        accent = (hue + 28) % 360
-        soft = (hue + 210) % 360
+    def _random_bright_color(self, avoid: set[str] | None = None) -> str:
+        avoid = avoid or set()
+        while True:
+            hue = random.randint(0, 359)
+            sat = random.randint(70, 98)
+            light = random.randint(48, 64)
+            color = f"hsl({hue} {sat}% {light}%)"
+            if color not in avoid:
+                return color
+
+    def _site_theme_config(self, topic: str) -> dict:
+        lowered = normalize(topic)
+        title = self._title_case_topic(topic)
+
+        if "футбол" in lowered:
+            return {
+                "title": "Футбол",
+                "eyebrow": "UEFA / PELE / GOAL",
+                "background": "#2ecc71",
+                "accent": "#145a32",
+                "surface": "#f3fff6",
+                "font": random.choice(["Trebuchet MS", "Verdana", "Tahoma"]),
+                "lead": "Яркий сайт про футбол: Лига Чемпионов, Пеле, скорость атаки, мяч, ворота и стадионный драйв.",
+                "sections": [
+                    ("Лига Чемпионов", "Европейские ночи, гимн турнира, большие клубы и матчи, которые решаются одним ударом."),
+                    ("Пеле", "Пеле стал символом футбольной магии: техника, скорость, голевое чутьё и влияние на целую эпоху."),
+                    ("Мяч и ворота", "Футбол держится на простых символах: круглый мяч, сетка ворот, финальный удар и рев трибун."),
+                    ("Темп матча", "Высокий прессинг, быстрые фланги, точный пас вразрез и один момент, который меняет всё."),
+                ],
+                "facts": ["Пеле", "ЛЧ", "Стадион", "Гол", "Пас", "Мяч"],
+            }
+
+        if "90" in lowered or "девяност" in lowered:
+            return {
+                "title": "90-е",
+                "eyebrow": "RETRO / TETRIS / BUBBLE GUM",
+                "background": "#ff00ff",
+                "accent": "#3b0a45",
+                "surface": "#fff4fd",
+                "font": random.choice(["Comic Sans MS", "Trebuchet MS", "Verdana"]),
+                "lead": "Кислотный сайт про 90-е: тетрис, жвачки, VHS, кассеты, игровые автоматы и шумный неон эпохи.",
+                "sections": [
+                    ("Тетрис", "Падающие блоки, пиксельный азарт и тот самый ритм, из-за которого экран не хотелось выключать."),
+                    ("Жвачки", "Вкус, вкладыши, обмены во дворе и ощущение, что маленькая вещь могла стать событием дня."),
+                    ("Улица и музыка", "Яркие ветровки, кассетные плееры, ларьки, плакаты и хаотичный стиль девяностых."),
+                    ("Игровой шум", "Dendy, приставки, VHS и ощущение, что техника стала порталом в другой мир."),
+                ],
+                "facts": ["Tetris", "Dendy", "VHS", "Жвачки", "Кассеты", "Неон"],
+            }
+
+        vivid = self._random_bright_color()
+        accent = self._random_bright_color({vivid})
+        surface = self._random_bright_color({vivid, accent})
+        words = self._topic_words(topic)
+        main = words[0].capitalize()
+        tail = ", ".join(words[1:4]) if len(words) > 1 else "визуальные акценты, факты и атмосферу"
         return {
-            "bg_a": f"hsl({hue} 65% 10%)",
-            "bg_b": f"hsl({(hue + 45) % 360} 72% 18%)",
-            "panel": f"hsl({soft} 30% 12% / 0.72)",
-            "panel_border": f"hsl({accent} 80% 78% / 0.18)",
-            "text": "hsl(0 0% 98%)",
-            "muted": f"hsl({soft} 40% 88% / 0.82)",
-            "accent": f"hsl({accent} 95% 66%)",
-            "accent_soft": f"hsl({accent} 90% 74% / 0.14)",
+            "title": title,
+            "eyebrow": " / ".join(word.upper() for word in words[:3]),
+            "background": vivid,
+            "accent": accent,
+            "surface": surface,
+            "font": random.choice(["Arial", "Trebuchet MS", "Georgia", "Verdana"]),
+            "lead": f"Яркий сайт по теме «{title}» с живой подачей, крупными акцентами и контентом вокруг темы без пустых блоков.",
+            "sections": [
+                ("Сцена", f"{title} подаётся как отдельный мир: крупный заголовок, сильный первый экран и заметный визуальный ритм."),
+                ("Факты", f"В центре внимания — {main.lower()}, {tail}, чтобы страница не ощущалась пустой заготовкой."),
+                ("Детали", f"Карточки, акцентные подписи и короткие абзацы помогают быстро считать тему «{title}»."),
+                ("Финальный экран", f"Последний блок закрывает настроение и оставляет у пользователя ощущение завершённого образа {main.lower()}."),
+            ],
+            "facts": [word.capitalize() for word in words[:6]],
         }
 
-    def _topic_sections(self, topic: str) -> list[tuple[str, str]]:
-        words = self._topic_words(topic)
-        focus = self._title_case_topic(topic)
-        anchor = words[0].capitalize()
-        extras = [word for word in words[1:4]]
-        extras_text = ", ".join(extras) if extras else "ключевые детали, визуальный стиль и атмосферу"
-        variants = [
-            ("Контекст", f"Коротко раскрой, почему тема «{focus}» цепляет и что в ней главное с первого экрана."),
-            ("Настроение", f"Передай через текст и композицию ощущение темы: {extras_text}."),
-            ("Подборка", f"Собери смысловые карточки, чтобы пользователь быстро понял мир темы «{focus}»."),
-            ("Факты", f"Покажи понятные факты, детали и примеры, связанные с «{focus}», без сухой энциклопедичности."),
-            ("Визуальный слой", f"Используй крупные заголовки, акцентные блоки и заметные переходы, чтобы {anchor.lower()} смотрелся живо."),
-            ("Финал", f"Заверши экран сильной точкой: приглашением изучить {focus} глубже или перейти к следующему разделу."),
-        ]
-        digest = hashlib.sha256(topic.encode("utf-8")).hexdigest()
-        order = int(digest[8:12], 16) % len(variants)
-        rotated = variants[order:] + variants[:order]
-        return rotated[:4]
+    def _site_layout_mode(self) -> dict[str, int | str]:
+        return random.choice(
+            [
+                {"radius": 18, "gap": 16, "hero_split": "1.4fr 1fr", "shadow": "0 20px 55px rgba(0,0,0,0.24)"},
+                {"radius": 28, "gap": 22, "hero_split": "1fr 1fr", "shadow": "0 28px 70px rgba(0,0,0,0.20)"},
+                {"radius": 14, "gap": 14, "hero_split": "1.7fr 0.8fr", "shadow": "0 18px 40px rgba(0,0,0,0.28)"},
+            ]
+        )
 
     def _generate_site_html(self, message: str) -> str:
         topic = self._extract_topic_phrase(message)
-        title = self._title_case_topic(topic)
-        topic_safe = self._escape_html(title)
-        palette = self._theme_palette(topic)
-        sections = self._topic_sections(topic)
-        words = self._topic_words(topic)
-        eyebrow = self._escape_html(" / ".join(word.upper() for word in words[:3]))
+        theme = self._site_theme_config(topic)
+        layout = self._site_layout_mode()
+        topic_safe = self._escape_html(theme["title"])
+        eyebrow = self._escape_html(theme["eyebrow"])
+        lead = self._escape_html(theme["lead"])
+        text_color = "#111111" if any(color in str(theme["surface"]).lower() for color in ("#fff", "#fef", "#ffd", "#ffe", "#f3")) else "#f8f8ff"
+        muted_color = "#2f2f2f" if text_color == "#111111" else "rgba(255,255,255,0.84)"
+        shell_bg = f"linear-gradient(135deg, {theme['background']}, {theme['accent']})"
         section_markup = []
-        for heading, body in sections:
+        for heading, body in theme["sections"]:
             section_markup.append(
                 "        <article class=\"card\">\n"
                 f"          <p class=\"card-kicker\">{topic_safe}</p>\n"
@@ -2025,7 +2073,7 @@ class SmartChatBot:
                 "        </article>"
             )
         gallery_items = []
-        for index, word in enumerate(words[:6] or ["тема"], start=1):
+        for index, word in enumerate(theme["facts"][:6] or ["Тема"], start=1):
             gallery_items.append(
                 "          <div class=\"tile\">\n"
                 f"            <span>{index:02d}</span>\n"
@@ -2040,46 +2088,36 @@ class SmartChatBot:
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{topic_safe}</title>
   <style>
-    :root {{
-      --bg-a: {palette["bg_a"]};
-      --bg-b: {palette["bg_b"]};
-      --panel: {palette["panel"]};
-      --panel-border: {palette["panel_border"]};
-      --text: {palette["text"]};
-      --muted: {palette["muted"]};
-      --accent: {palette["accent"]};
-      --accent-soft: {palette["accent_soft"]};
-      --radius: {18 + (len(words) % 8)}px;
-    }}
     * {{ box-sizing: border-box; }}
     body {{
       margin: 0;
       min-height: 100vh;
-      font-family: "Segoe UI", Arial, sans-serif;
-      color: var(--text);
+      font-family: "{theme["font"]}", Arial, sans-serif;
+      color: {text_color};
       background:
-        radial-gradient(circle at top left, var(--accent-soft), transparent 34%),
-        linear-gradient(135deg, var(--bg-a), var(--bg-b));
+        radial-gradient(circle at top right, {theme["surface"]}, transparent 26%),
+        radial-gradient(circle at bottom left, {theme["accent"]}, transparent 22%),
+        {shell_bg};
     }}
     .shell {{
       width: min(1180px, calc(100% - 32px));
       margin: 0 auto;
-      padding: 32px 0 64px;
+      padding: {24 + random.randint(0, 16)}px 0 {48 + random.randint(0, 28)}px;
     }}
     .hero {{
-      padding: 32px;
-      border: 1px solid var(--panel-border);
-      border-radius: calc(var(--radius) + 10px);
-      background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)), var(--panel);
-      backdrop-filter: blur(18px);
-      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+      padding: {28 + random.randint(0, 14)}px;
+      border: 2px solid {theme["accent"]};
+      border-radius: {layout["radius"] + 10}px;
+      background: {theme["surface"]};
+      box-shadow: {layout["shadow"]};
     }}
     .eyebrow {{
       margin: 0 0 14px;
-      letter-spacing: 0.32em;
+      letter-spacing: {0.20 + random.random() * 0.18:.2f}em;
       text-transform: uppercase;
-      color: var(--muted);
+      color: {theme["accent"]};
       font-size: 12px;
+      font-weight: 700;
     }}
     h1 {{
       margin: 0;
@@ -2091,48 +2129,50 @@ class SmartChatBot:
       margin: 18px 0 0;
       font-size: clamp(18px, 2.1vw, 24px);
       line-height: 1.5;
-      color: var(--muted);
+      color: {muted_color};
     }}
     .hero-row {{
       display: grid;
-      grid-template-columns: 1.5fr 0.9fr;
-      gap: 18px;
+      grid-template-columns: {layout["hero_split"]};
+      gap: {layout["gap"]}px;
       margin-top: 28px;
     }}
     .hero-panel, .cards, .gallery {{
-      border: 1px solid var(--panel-border);
-      border-radius: var(--radius);
-      background: rgba(6, 8, 18, 0.26);
-      padding: 20px;
+      border: 2px solid rgba(0,0,0,0.12);
+      border-radius: {layout["radius"]}px;
+      background: rgba(255,255,255,0.18);
+      padding: {16 + random.randint(0, 8)}px;
+      backdrop-filter: blur(10px);
     }}
     .hero-panel strong {{
       display: block;
       font-size: 14px;
       text-transform: uppercase;
       letter-spacing: 0.18em;
-      color: var(--accent);
+      color: {theme["accent"]};
       margin-bottom: 12px;
     }}
     .hero-panel p {{
       margin: 0;
-      color: var(--muted);
+      color: {muted_color};
       line-height: 1.65;
     }}
     .cards {{
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax({210 + random.randint(0, 40)}px, 1fr));
+      gap: {layout["gap"]}px;
       margin-top: 18px;
     }}
     .card {{
-      padding: 18px;
-      border-radius: calc(var(--radius) - 4px);
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.08);
+      padding: {16 + random.randint(0, 10)}px;
+      border-radius: {max(layout["radius"] - 4, 10)}px;
+      background: rgba(255,255,255,0.28);
+      border: 1px solid rgba(0,0,0,0.08);
+      transform: rotate({random.choice([-1, 0, 1])}deg);
     }}
     .card-kicker {{
       margin: 0 0 12px;
-      color: var(--accent);
+      color: {theme["accent"]};
       font-size: 12px;
       letter-spacing: 0.18em;
       text-transform: uppercase;
@@ -2143,30 +2183,28 @@ class SmartChatBot:
     }}
     .card p {{
       margin: 0;
-      color: var(--muted);
+      color: {muted_color};
       line-height: 1.6;
     }}
     .gallery {{
       margin-top: 18px;
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-      gap: 14px;
+      gap: {max(layout["gap"] - 2, 10)}px;
     }}
     .tile {{
       min-height: 120px;
       padding: 16px;
-      border-radius: calc(var(--radius) - 8px);
-      background:
-        linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03)),
-        rgba(0,0,0,0.18);
-      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: {max(layout["radius"] - 8, 8)}px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.45), rgba(255,255,255,0.12));
+      border: 1px solid rgba(0,0,0,0.08);
       display: flex;
       flex-direction: column;
       justify-content: space-between;
     }}
     .tile span {{
       font-size: 12px;
-      color: var(--muted);
+      color: {muted_color};
       letter-spacing: 0.2em;
       text-transform: uppercase;
     }}
@@ -2187,15 +2225,15 @@ class SmartChatBot:
     <section class="hero">
       <p class="eyebrow">{eyebrow}</p>
       <h1>{topic_safe}</h1>
-      <p class="lead">Одностраничный сайт, который сразу погружает в тему «{topic_safe}» через атмосферу, смысловые блоки и акцентную подачу.</p>
+      <p class="lead">{lead}</p>
       <div class="hero-row">
         <div class="hero-panel">
           <strong>Фокус</strong>
-          <p>Первый экран задаёт настроение, дальше пользователь быстро получает контекст, важные акценты и визуальные точки входа в тему.</p>
+          <p>{self._escape_html(theme["sections"][0][1])}</p>
         </div>
         <div class="hero-panel">
           <strong>Ритм</strong>
-          <p>Композиция построена так, чтобы сайт ощущался как отдельный мир: крупный заголовок, карточки, короткие секции и лёгкое движение по экрану.</p>
+          <p>{self._escape_html(theme["sections"][1][1])}</p>
         </div>
       </div>
     </section>
@@ -2210,28 +2248,7 @@ class SmartChatBot:
 </html>"""
 
     def _local_build_generation(self, message: str) -> str:
-        topic = self._extract_topic_phrase(message)
-        normalized = normalize(message)
-        is_site = any(word in normalized for word in ("сайт", "страниц", "html", "лендинг"))
-        is_bot = any(word in normalized for word in ("бот", "telegram"))
-        is_api = any(word in normalized for word in ("api", "fastapi", "flask", "backend"))
-
-        if is_site:
-            return self._generate_site_html(message)
-
-        if is_bot:
-            return (
-                f"Минимальный локальный каркас под `{topic}`: точка входа, обработчики, хранение состояния и один рабочий сценарий без лишней архитектуры."
-            )
-
-        if is_api:
-            return (
-                f"Минимальный локальный каркас API под `{topic}`: endpoint, валидация, функция обработки и понятный JSON-ответ."
-            )
-
-        return (
-            f"Локальный fallback по теме `{topic}`: минимальная рабочая структура без жёстких шаблонов."
-        )
+        return self._generate_site_html(message)
 
     def _code_reply(self, message: str) -> str | None:
         normalized = normalize(message)
@@ -2250,25 +2267,10 @@ class SmartChatBot:
         if not any(word in normalized for word in coding_markers):
             return None
 
-        if any(word in normalized for word in ("сгенерируй", "генерируй", "сделай")) and any(
-            word in normalized for word in ("сайт", "страниц", "html")
-        ):
+        if any(word in normalized for word in ("сгенерируй", "генерируй", "сделай", "добавь")):
             return self._local_build_generation(message)
 
-        if ("user_memory" in normalized or "/memory" in normalized or "записывал каждое сообщение" in normalized) and any(
-            marker in normalized for marker in ("бот", "файл", "model_store", "memory")
-        ):
-            return self._local_build_generation(message)
-
-        if normalized.startswith(("сделай ", "добавь ", "измени ", "почини ")) and any(
-            marker in normalized for marker in ("бот", "сайт", "чат", "функц", "кнопк", "команд", "файл", "api")
-        ):
-            return (
-                "Это уже конкретная задача по проекту. Нормальный ответ тут такой: сначала определить, где именно меняется логика, потом какие данные нужны, потом какой минимальный код закрывает сценарий.\n\n"
-                "Если коротко: опиши желаемое поведение, входные данные, где это должно жить и что должно вернуться на выходе. Тогда я смогу сгенерировать уже не общую болтовню, а нормальный кусок реализации."
-            )
-
-        if any(word in normalized for word in ("telegram", "fastapi", "flask", "html", "css", "python", "javascript", "api", "бот")):
+        if any(word in normalized for word in ("telegram", "fastapi", "flask", "html", "css", "python", "javascript", "api", "бот", "файл", "memory")):
             return self._local_build_generation(message)
 
         return None
