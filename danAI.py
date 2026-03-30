@@ -33,6 +33,13 @@ except ImportError:
     WebPushException = Exception
     webpush = None
 
+try:
+    from google import genai
+    from google.genai import types as genai_types
+except ImportError:
+    genai = None
+    genai_types = None
+
 
 DATA_FILE = Path("data_seed.txt") if Path("data_seed.txt").exists() else Path("data.txt")
 ENV_FILE = Path(".env")
@@ -55,11 +62,11 @@ TOP_K = 5
 MIN_SCORE = 0.17
 RANDOM_SEED = 42
 INDEX_VERSION = 4
-CHAT_MEMORY_LIMIT = 256
+CHAT_MEMORY_LIMIT = 10
 SERPAPI_ENDPOINT = "https://serpapi.com/search.json"
 OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses"
 DATABASE_RUNTIME_ERROR = ""
-LOCAL_ONLY_REPLIES = True
+LOCAL_ONLY_REPLIES = False
 
 STOPWORDS = {
     "а",
@@ -295,7 +302,7 @@ DEFAULT_SUPPORT_BY_TYPE = {
     "how_to": "лучше идти от маленького шага, затем закреплять практикой и только потом усложнять",
     "why": "часто на это влияют усталость, неясная цель, страх ошибки или слишком большой первый шаг",
     "can": "проще всего начать с минимальной рабочей версии и дальше улучшать её по шагам",
-    "opinion": "лучше сначала уточнить контекст, потом выделить главное и ответить по сути без лишней воды",
+    "opinion": "лучше сразу выбрать практичный ответ и не уходить в пустые рассуждения",
     "request": "лучше сразу определить минимальную рабочую версию, основные экраны, данные и одно главное действие пользователя",
 }
 
@@ -1627,6 +1634,97 @@ def openai_generate_reply(
     return re.sub(r"\s+", " ", text).strip()
 
 
+def gemini_api_key() -> str:
+    return os.getenv("GEMINI_API_KEY", "").strip()
+
+
+def gemini_model() -> str:
+    return os.getenv("GEMINI_MODEL", "gemini-1.5-flash").strip() or "gemini-1.5-flash"
+
+
+def gemini_enabled() -> bool:
+    return bool(gemini_api_key()) and genai is not None and genai_types is not None
+
+
+def gemini_system_instruction(force_code: bool = False) -> str:
+    if force_code:
+        return (
+            "ТЫ — RAW-ГЕНЕРАТОР КОДА. "
+            "ТЕБЕ ЗАПРЕЩЕНО ЗДОРОВАТЬСЯ, РАССУЖДАТЬ, УТОЧНЯТЬ КОНТЕКСТ ИЛИ ОПИСЫВАТЬ СТРУКТУРУ ФАЙЛОВ. "
+            "ЕСЛИ ПОЛЬЗОВАТЕЛЬ ПРОСИТ САЙТ, СТРАНИЦУ, HTML ИЛИ ТЕМУ, ТЫ СРАЗУ ВОЗВРАЩАЕШЬ ГОТОВЫЙ КОД. "
+            "ОТВЕТ ДОЛЖЕН НАЧИНАТЬСЯ С <!doctype html>. "
+            "НЕ ПИШИ НИ ОДНОГО СЛОВА ВНЕ КОДА. "
+            "ДИЗАЙН ДОЛЖЕН МЕНЯТЬСЯ ПОД ТЕМУ ЗАПРОСА И НЕ ПОВТОРЯТЬСЯ ДОСЛОВНО."
+        )
+    return (
+        "Ты сильный русскоязычный помощник. "
+        "Отвечай прямо, по делу и без пустых вступлений. "
+        "Не уточняй задачу без необходимости. "
+        "Если пользователь просит код, сразу давай код. "
+        "Если пользователь продолжает прошлую задачу, учитывай историю диалога."
+    )
+
+
+def gemini_generate_reply(
+    message: str,
+    history: list[tuple[str, str]],
+    profile: dict | None = None,
+    attachments: list[dict] | None = None,
+    force_code: bool = False,
+) -> str | None:
+    api_key = gemini_api_key()
+    if not api_key or genai is None or genai_types is None:
+        return None
+
+    profile = profile or {}
+    client = genai.Client(api_key=api_key)
+    parts: list[str] = []
+    if profile.get("name"):
+        parts.append(f"Имя пользователя: {profile['name']}")
+    likes = profile.get("likes") or []
+    if likes:
+        parts.append(f"Интересы: {', '.join(likes[:5])}")
+    if profile.get("activity"):
+        parts.append(f"Занятие: {profile['activity']}")
+
+    prompt_blocks: list[str] = []
+    if parts:
+        prompt_blocks.append("Профиль пользователя:\n" + "\n".join(parts))
+    if history:
+        history_lines: list[str] = []
+        for user_text, bot_text in history[-CHAT_MEMORY_LIMIT:]:
+            history_lines.append(f"Пользователь: {user_text}")
+            history_lines.append(f"Ассистент: {bot_text}")
+        prompt_blocks.append("История диалога:\n" + "\n".join(history_lines))
+    if attachments:
+        text_attachments = [
+            item.get("text", "").strip()
+            for item in attachments
+            if item.get("text")
+        ]
+        if text_attachments:
+            prompt_blocks.append("Вложения:\n" + "\n\n".join(text_attachments[:4]))
+    prompt_blocks.append(f"Пользователь: {message}")
+    prompt_blocks.append("Ассистент:")
+    prompt = "\n\n".join(block for block in prompt_blocks if block).strip()
+
+    try:
+        response = client.models.generate_content(
+            model=gemini_model(),
+            contents=prompt,
+            config=genai_types.GenerateContentConfig(
+                system_instruction=gemini_system_instruction(force_code=force_code),
+                temperature=0.9 if force_code else 0.7,
+                max_output_tokens=2400 if force_code else 1200,
+            ),
+        )
+    except Exception:
+        return None
+
+    text = re.sub(r"\s+\n", "\n", getattr(response, "text", "") or "").strip()
+    return text or None
+
+
 class SmartChatBot:
     def __init__(self, index: dict):
         self.documents = index["documents"]
@@ -1642,7 +1740,7 @@ class SmartChatBot:
         self.learn_from_chat = False
         self.user_profile = load_user_profile()
         self.awaiting_search_query = False
-        self.use_openai = False if LOCAL_ONLY_REPLIES else openai_enabled()
+        self.use_gemini = False if LOCAL_ONLY_REPLIES else gemini_enabled()
 
     def _vectorize(self, text: str) -> Counter:
         vector = Counter()
@@ -2123,27 +2221,16 @@ class SmartChatBot:
 
         if is_bot:
             return (
-                f"Ок, генерирую локально по задаче `{topic}`. Я бы собрал это так:\n\n"
-                "1. Точка входа бота.\n"
-                "2. Обработчики команд и сообщений.\n"
-                "3. Отдельный слой хранения состояния.\n"
-                "4. Минимальный рабочий сценарий без лишней архитектуры.\n\n"
-                "Если хочешь, следующим сообщением я дам уже конкретный код файлов."
+                f"Минимальный локальный каркас под `{topic}`: точка входа, обработчики, хранение состояния и один рабочий сценарий без лишней архитектуры."
             )
 
         if is_api:
             return (
-                f"Ок, по `{topic}` я бы строил API так:\n\n"
-                "1. Один входной endpoint.\n"
-                "2. Валидация данных.\n"
-                "3. Логика обработки в отдельной функции.\n"
-                "4. Нормальный JSON-ответ с понятной структурой.\n\n"
-                "Если хочешь, следующим сообщением я дам готовый код API без общих рассуждений."
+                f"Минимальный локальный каркас API под `{topic}`: endpoint, валидация, функция обработки и понятный JSON-ответ."
             )
 
         return (
-            f"Ок, генерирую по теме `{topic}` без жёстких шаблонов. Сначала определяю минимальную рабочую структуру, потом собираю логику и только после этого оформляю результат. "
-            "Если хочешь, следующим сообщением я выдам уже конкретный код или разметку под эту задачу."
+            f"Локальный fallback по теме `{topic}`: минимальная рабочая структура без жёстких шаблонов."
         )
 
     def _code_reply(self, message: str) -> str | None:
@@ -2600,6 +2687,22 @@ class SmartChatBot:
         matches: list[tuple[float, dict]] | None = None
 
         cleaned = user_input
+
+        if self.use_gemini:
+            force_code = self._force_generation_request(cleaned) or any(
+                word in normalize(cleaned) for word in ("сайт", "страниц", "html", "лендинг")
+            )
+            generated = gemini_generate_reply(
+                cleaned,
+                history=self.history,
+                profile=self.user_profile,
+                attachments=attachments,
+                force_code=force_code,
+            )
+            if generated:
+                self.history.append((cleaned, generated))
+                self.history = self.history[-CHAT_MEMORY_LIMIT:]
+                return generated
 
         implicit_query = self._extract_search_followup(cleaned)
         if implicit_query:
